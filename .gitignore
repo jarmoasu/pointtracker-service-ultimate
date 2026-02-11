@@ -1,0 +1,17 @@
+# Node
+node_modules/
+npm-debug.log*
+pnpm-debug.log*
+
+# Env
+.env
+
+# Prisma / DB
+prisma/dev.db
+prisma/dev.db-journal
+
+# OS
+.DS_Store
+
+# Logs
+logs/
