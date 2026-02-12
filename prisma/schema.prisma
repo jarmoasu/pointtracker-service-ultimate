@@ -1,0 +1,44 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+model StreamState {
+  streamId             String   @id
+  homeTeamName         String   @default("")
+  awayTeamName         String   @default("")
+  homeScore            Int      @default(0)
+  awayScore            Int      @default(0)
+  gameClockSeconds     Int      @default(0)
+
+  lastScoreTeam        String?  // "home" | "away"
+  lastScorer           String?
+  lastAssist           String?
+  lastScoreClockSeconds Int?
+
+  updatedAt            DateTime @updatedAt
+  createdAt            DateTime @default(now())
+}
+
+model AuthState {
+  id                  Int      @id @default(1)
+  claimCodeHash       String
+  activeWriteTokenHash String?
+  activeWriterName    String?
+  claimedAt           DateTime?
+  lastRequestId       String?
+
+  adminPasswordHash   String
+  updatedAt           DateTime @updatedAt
+  createdAt           DateTime @default(now())
+}
