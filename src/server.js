@@ -14,15 +14,16 @@ const fastify = require('fastify')({
 });
 
 fastify.register(cookie);
+
 fastify.register(secureSession, {
-  secret: Buffer.from(process.env.SESSION_SECRET, 'utf8'),
-  cookie: {
-    path: '/',
-    httpOnly: true,
-    secure: true,   // Render uses HTTPS
-    sameSite: 'lax',
-  },
-});
+    secret: Buffer.from(process.env.SESSION_SECRET_HEX, 'hex'),
+    cookie: {
+      path: '/',
+      httpOnly: true,
+      secure: true,
+      sameSite: 'lax',
+    },
+  });
 
 fastify.register(publicRoutes);
 fastify.register(writerRoutes);

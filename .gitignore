@@ -16,3 +16,6 @@ prisma/dev.db-journal
 # Logs
 logs/
 /src/generated/prisma
+
+
+cookies.txt
