@@ -35,10 +35,6 @@ fastify.get('/health', async () => {
   return { ok: true };
 });
 
-fastify.get('/__routes', async () => {
-    return fastify.printRoutes();
-  });
-
 async function start() {
     try {
       const { streamId } = await ensureInitialized();
