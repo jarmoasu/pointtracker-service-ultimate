@@ -55,6 +55,100 @@ async function writerRoutes(fastify) {
   fastify.get('/writer-test', { preHandler: requireWriter }, async (request) => {
     return { ok: true, writer: request.writer || null };
   });
+
+  // Update team names
+  fastify.put('/teams', { preHandler: requireWriter }, async (request, reply) => {
+    const { homeTeamName, awayTeamName } = request.body || {};
+
+    if (typeof homeTeamName !== 'string' || typeof awayTeamName !== 'string') {
+      return reply.code(400).send({ error: 'homeTeamName and awayTeamName required' });
+    }
+
+    const streamId = process.env.STREAM_ID || 'main';
+
+    await prisma.streamState.update({
+      where: { streamId },
+      data: {
+        homeTeamName: homeTeamName.trim(),
+        awayTeamName: awayTeamName.trim(),
+      },
+    });
+
+    return { ok: true };
+  });
+
+  // Update game clock
+  fastify.put('/clock', { preHandler: requireWriter }, async (request, reply) => {
+    const { gameClockSeconds } = request.body || {};
+
+    if (typeof gameClockSeconds !== 'number' || gameClockSeconds < 0) {
+      return reply.code(400).send({ error: 'valid gameClockSeconds required' });
+    }
+
+    const streamId = process.env.STREAM_ID || 'main';
+
+    await prisma.streamState.update({
+      where: { streamId },
+      data: {
+        gameClockSeconds: Math.floor(gameClockSeconds),
+      },
+    });
+
+    return { ok: true };
+  });
+
+    // Record score
+    fastify.post('/score', { preHandler: requireWriter }, async (request, reply) => {
+        const { team, gameClockSeconds, scorer, assist, requestId } = request.body || {};
+    
+        if (team !== 'home' && team !== 'away') {
+          return reply.code(400).send({ error: 'team must be "home" or "away"' });
+        }
+    
+        if (typeof gameClockSeconds !== 'number' || gameClockSeconds < 0) {
+          return reply.code(400).send({ error: 'valid gameClockSeconds required' });
+        }
+    
+        if (!requestId || typeof requestId !== 'string') {
+          return reply.code(400).send({ error: 'requestId required' });
+        }
+    
+        const streamId = process.env.STREAM_ID || 'main';
+    
+        // Idempotency check
+        const auth = await prisma.authState.findUnique({ where: { id: 1 } });
+        if (auth.lastRequestId === requestId) {
+          return { ok: true, duplicate: true };
+        }
+    
+        const updateData = {
+          gameClockSeconds: Math.floor(gameClockSeconds),
+          lastScoreTeam: team,
+          lastScorer: scorer || null,
+          lastAssist: assist || null,
+          lastScoreClockSeconds: Math.floor(gameClockSeconds),
+        };
+    
+        if (team === 'home') {
+          updateData.homeScore = { increment: 1 };
+        } else {
+          updateData.awayScore = { increment: 1 };
+        }
+    
+        await prisma.$transaction([
+          prisma.streamState.update({
+            where: { streamId },
+            data: updateData,
+          }),
+          prisma.authState.update({
+            where: { id: 1 },
+            data: { lastRequestId: requestId },
+          }),
+        ]);
+    
+        return { ok: true };
+      });
+
 }
 
 module.exports = writerRoutes;
