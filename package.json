@@ -3,10 +3,10 @@
   "version": "1.0.0",
   "description": "Backend service for real-time Ultimate Frisbee scoring.",
   "main": "index.js",
-"scripts": {
-  "build": "prisma generate",
-  "start": "prisma migrate deploy && node src/server.js"
-},
+  "scripts": {
+    "build": "prisma generate",
+    "start": "prisma migrate deploy && node src/server.js"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/jarmoasu/pointtracker-service-ultimate.git"
@@ -19,11 +19,11 @@
   },
   "homepage": "https://github.com/jarmoasu/pointtracker-service-ultimate#readme",
   "dependencies": {
-    "@prisma/client": "...",
+    "@prisma/client": "^6.19.2",
     "argon2": "^0.44.0",
     "dotenv": "^17.2.4",
     "fastify": "^5.7.4",
-    "prisma": "..."
+    "prisma": "^6.19.2"
   },
   "engines": {
     "node": ">=20"
