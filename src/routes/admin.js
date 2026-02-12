@@ -27,6 +27,11 @@ async function adminRoutes(fastify) {
 
     request.session.set('admin', true);
     return { ok: true };
+
+    fastify.get('/admin/ping', { preHandler: requireAdmin }, async () => {
+        return { ok: true };
+      });
+
   });
 
   // Logout
