@@ -1,5 +1,6 @@
 const { ensureInitialized } = require('./lib/init');
 const publicRoutes = require('./routes/public');
+const writerRoutes = require('./routes/writer');
 
 'use strict';
 
@@ -10,6 +11,7 @@ const fastify = require('fastify')({
 });
 
 fastify.register(publicRoutes);
+fastify.register(writerRoutes);
 
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || '0.0.0.0';
