@@ -3,7 +3,7 @@ node_modules/
 npm-debug.log*
 pnpm-debug.log*
 
-# Env
+# Env - using Render enviroment variables. .env is needed loaclly for Prisma to work.
 .env
 
 # Prisma / DB
@@ -15,3 +15,4 @@ prisma/dev.db-journal
 
 # Logs
 logs/
+/src/generated/prisma
