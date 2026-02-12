@@ -3,6 +3,7 @@ const publicRoutes = require('./routes/public');
 const writerRoutes = require('./routes/writer');
 const cookie = require('@fastify/cookie');
 const secureSession = require('@fastify/secure-session');
+const adminRoutes = require('./routes/admin');
   
 'use strict';
 
@@ -25,6 +26,7 @@ fastify.register(secureSession, {
 
 fastify.register(publicRoutes);
 fastify.register(writerRoutes);
+fastify.register(adminRoutes);
 
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || '0.0.0.0';
@@ -32,6 +34,10 @@ const HOST = process.env.HOST || '0.0.0.0';
 fastify.get('/health', async () => {
   return { ok: true };
 });
+
+fastify.get('/__routes', async () => {
+    return fastify.printRoutes();
+  });
 
 async function start() {
     try {
