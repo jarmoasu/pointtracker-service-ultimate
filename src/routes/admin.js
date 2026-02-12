@@ -34,6 +34,11 @@ async function adminRoutes(fastify) {
     return { ok: true };
   });
 
+  // Ping endpoint (open - just for testing)
+  fastify.get('/admin/ping-open', async (request, reply) => {
+    return reply.send({ ok: true });
+  });
+
   // Logout
   fastify.post('/admin/logout', { preHandler: requireAdmin }, async (request) => {
     request.session.delete();
