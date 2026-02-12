@@ -10,27 +10,49 @@ function getBearerToken(request) {
   return token || null;
 }
 
+/**
+ * Writer auth rules (MVP):
+ * - If admin session is present, allow write endpoints (admin can operate UI without a writer token).
+ * - Otherwise require Authorization: Bearer <writeToken> and verify against AuthState.activeWriteTokenHash.
+ */
 async function requireWriter(request, reply) {
-  const token = getBearerToken(request);
-  if (!token) {
-    return reply.code(401).send({ error: 'missing bearer token' });
-  }
+  try {
+    // Allow admin session to act as writer (for admin UI convenience)
+    if (request.session && request.session.get('admin') === true) {
+      return;
+    }
 
-  const auth = await prisma.authState.findUnique({ where: { id: 1 } });
-  if (!auth || !auth.activeWriteTokenHash) {
-    return reply.code(401).send({ error: 'no active writer token set' });
-  }
+    const token = getBearerToken(request);
+    if (!token) {
+      reply.code(401);
+      return reply.send({ error: 'missing bearer token' });
+    }
 
-  const ok = await argon2.verify(auth.activeWriteTokenHash, token);
-  if (!ok) {
-    return reply.code(401).send({ error: 'invalid bearer token' });
-  }
+    const auth = await prisma.authState.findUnique({ where: { id: 1 } });
 
-  // optional: attach writer info for later use
-  request.writer = {
-    name: auth.activeWriterName || null,
-    claimedAt: auth.claimedAt || null,
-  };
+    if (!auth || !auth.activeWriteTokenHash) {
+      reply.code(401);
+      return reply.send({ error: 'no active writer token set' });
+    }
+
+    const ok = await argon2.verify(auth.activeWriteTokenHash, token);
+    if (!ok) {
+      reply.code(401);
+      return reply.send({ error: 'invalid bearer token' });
+    }
+
+    // Optional: attach writer info for handlers/logging
+    request.writer = {
+      name: auth.activeWriterName || null,
+      claimedAt: auth.claimedAt || null,
+    };
+
+    return;
+  } catch (err) {
+    request.log?.error(err, 'requireWriter failed');
+    reply.code(500);
+    return reply.send({ error: 'writer auth error' });
+  }
 }
 
 module.exports = { requireWriter };

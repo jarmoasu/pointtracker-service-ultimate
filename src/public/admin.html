@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>PointTracker Admin</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      max-width: 900px;
+      margin: 40px auto;
+      padding: 0 20px;
+    }
+
+    h1 {
+      margin-bottom: 30px;
+    }
+
+    .card {
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 20px;
+      background: #fafafa;
+    }
+
+    input, select {
+      padding: 6px;
+      margin: 4px 4px 4px 0;
+    }
+
+    button {
+      padding: 8px 14px;
+      cursor: pointer;
+    }
+
+    pre {
+      background: #111;
+      color: #0f0;
+      padding: 10px;
+      overflow-x: auto;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    .danger {
+      background: #c0392b;
+      color: white;
+      border: none;
+    }
+
+    .success {
+      color: green;
+    }
+
+    .error {
+      color: red;
+    }
+  </style>
+</head>
+<body>
+
+<h1>PointTracker Admin</h1>
+
+<!-- LOGIN -->
+<div id="loginCard" class="card">
+  <h2>Login</h2>
+  <input type="password" id="password" placeholder="Admin password" />
+  <button onclick="login()">Login</button>
+  <div id="loginError" class="error"></div>
+</div>
+
+<!-- ADMIN PANEL -->
+<div id="adminPanel" class="hidden">
+
+  <!-- STREAM STATE -->
+  <div class="card">
+    <h2>Stream State</h2>
+    <pre id="stateView"></pre>
+    <button onclick="loadState()">Refresh</button>
+  </div>
+
+  <!-- WRITER INFO -->
+  <div class="card">
+    <h2>Writer</h2>
+    <pre id="writerView"></pre>
+  </div>
+
+  <!-- UPDATE TEAMS -->
+  <div class="card">
+    <h2>Update Teams</h2>
+    <input id="homeTeamInput" placeholder="Home Team" />
+    <input id="awayTeamInput" placeholder="Away Team" />
+    <button onclick="updateTeams()">Save Teams</button>
+    <div id="teamsResult" class="success"></div>
+  </div>
+
+  <!-- ADD GOAL -->
+  <div class="card">
+    <h2>Add Goal</h2>
+
+    <label>
+      Team:
+      <select id="goalTeam">
+        <option value="home">Home</option>
+        <option value="away">Away</option>
+      </select>
+    </label>
+    <br><br>
+
+    <label>
+      Game Clock (seconds):
+      <input type="number" id="goalClock" value="0" />
+    </label>
+    <br><br>
+
+    <label>
+      Scorer:
+      <input id="goalScorer" placeholder="Optional" />
+    </label>
+    <br><br>
+
+    <label>
+      Assist:
+      <input id="goalAssist" placeholder="Optional" />
+    </label>
+    <br><br>
+
+    <button onclick="addGoal()">Add Goal</button>
+    <div id="goalResult" class="success"></div>
+  </div>
+
+  <!-- ROTATE CLAIM -->
+  <div class="card">
+    <h2>Rotate Claim Code</h2>
+    <button onclick="rotateClaim()">Generate New Claim Code</button>
+    <div id="claimResult"></div>
+  </div>
+
+  <!-- RESET -->
+  <div class="card">
+    <h2>Reset Game</h2>
+    <button class="danger" onclick="resetGame()">Reset</button>
+  </div>
+
+  <button onclick="logout()">Logout</button>
+
+</div>
+
+<script>
+
+async function login() {
+  const password = document.getElementById("password").value;
+  const errorEl = document.getElementById("loginError");
+  errorEl.innerText = "";
+
+  const res = await fetch("/admin/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ password })
+  });
+
+  if (!res.ok) {
+    errorEl.innerText = "Login failed";
+    return;
+  }
+
+  document.getElementById("loginCard").classList.add("hidden");
+  document.getElementById("adminPanel").classList.remove("hidden");
+
+  loadState();
+}
+
+async function logout() {
+  await fetch("/admin/logout", { method: "POST" });
+  location.reload();
+}
+
+async function loadState() {
+  const res = await fetch("/admin/state");
+  if (!res.ok) return;
+
+  const data = await res.json();
+
+  document.getElementById("stateView").innerText =
+    JSON.stringify(data.state, null, 2);
+
+  document.getElementById("writerView").innerText =
+    JSON.stringify(data.writer, null, 2);
+
+  // preload team inputs
+  if (data.state) {
+    document.getElementById("homeTeamInput").value = data.state.homeTeamName || "";
+    document.getElementById("awayTeamInput").value = data.state.awayTeamName || "";
+    document.getElementById("goalClock").value = data.state.gameClockSeconds || 0;
+  }
+}
+
+async function updateTeams() {
+  const home = document.getElementById("homeTeamInput").value;
+  const away = document.getElementById("awayTeamInput").value;
+
+  const res = await fetch("/teams", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      homeTeamName: home,
+      awayTeamName: away
+    })
+  });
+
+  const resultEl = document.getElementById("teamsResult");
+
+  if (res.ok) {
+    resultEl.innerText = "Teams updated.";
+    loadState();
+  } else {
+    resultEl.innerText = "Failed to update teams.";
+  }
+}
+
+async function addGoal() {
+  const team = document.getElementById("goalTeam").value;
+  const clock = Number(document.getElementById("goalClock").value);
+  const scorer = document.getElementById("goalScorer").value;
+  const assist = document.getElementById("goalAssist").value;
+
+  const requestId = "admin-" + Date.now();
+
+  const res = await fetch("/score", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      team,
+      gameClockSeconds: clock,
+      scorer,
+      assist,
+      requestId
+    })
+  });
+
+  const resultEl = document.getElementById("goalResult");
+
+  if (res.ok) {
+    resultEl.innerText = "Goal added.";
+    loadState();
+  } else {
+    resultEl.innerText = "Failed to add goal.";
+  }
+}
+
+async function rotateClaim() {
+  const res = await fetch("/admin/rotate-claim", { method: "POST" });
+  if (!res.ok) return;
+
+  const data = await res.json();
+  document.getElementById("claimResult").innerText =
+    "New claim code: " + data.claimCode;
+}
+
+async function resetGame() {
+  if (!confirm("Are you sure you want to reset the game?")) return;
+
+  const res = await fetch("/admin/reset", { method: "POST" });
+  if (res.ok) {
+    loadState();
+  }
+}
+
+</script>
+
+</body>
+</html>

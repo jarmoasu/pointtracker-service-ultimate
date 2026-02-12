@@ -4,6 +4,8 @@ const writerRoutes = require('./routes/writer');
 const cookie = require('@fastify/cookie');
 const secureSession = require('@fastify/secure-session');
 const adminRoutes = require('./routes/admin');
+const path = require('path');
+const fastifyStatic = require('@fastify/static');
   
 'use strict';
 
@@ -28,6 +30,11 @@ fastify.register(secureSession, {
 fastify.register(publicRoutes);
 fastify.register(writerRoutes);
 fastify.register(adminRoutes);
+
+fastify.register(fastifyStatic, {
+    root: path.join(__dirname, 'public'),
+    prefix: '/', 
+  });
 
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || '0.0.0.0';
