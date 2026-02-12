@@ -1,13 +1,26 @@
 const { ensureInitialized } = require('./lib/init');
 const publicRoutes = require('./routes/public');
 const writerRoutes = require('./routes/writer');
-
+const cookie = require('@fastify/cookie');
+const secureSession = require('@fastify/secure-session');
+  
 'use strict';
 
 require('dotenv').config();
 
 const fastify = require('fastify')({
   logger: true,
+});
+
+fastify.register(cookie);
+fastify.register(secureSession, {
+  secret: Buffer.from(process.env.SESSION_SECRET, 'utf8'),
+  cookie: {
+    path: '/',
+    httpOnly: true,
+    secure: true,   // Render uses HTTPS
+    sameSite: 'lax',
+  },
 });
 
 fastify.register(publicRoutes);
