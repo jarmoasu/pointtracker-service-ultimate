@@ -1,6 +1,6 @@
 # PointTracker Service – Ultimate
 
-Backend service for real-time Ultimate Frisbee scoring.
+Backend service for real-time Ultimate Frisbee scoring. Separate mobile app for live score keeping is comign soon.. 
 
 ## Tech
 - Node.js
