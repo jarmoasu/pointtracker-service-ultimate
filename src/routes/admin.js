@@ -12,7 +12,11 @@ function randomClaimCode() {
 
 async function adminRoutes(fastify) {
   // Login (no session required)
-  fastify.post('/admin/login', async (request, reply) => {
+  fastify.post('/admin/login', {
+    config: {
+      rateLimit: { max: 10, timeWindow: '1 minute' },
+    },
+  }, async (request, reply) => {
     const { password } = request.body || {};
     if (typeof password !== 'string' || !password.trim()) {
       return reply.code(400).send({ error: 'password required' });
@@ -67,8 +71,11 @@ async function adminRoutes(fastify) {
     };
   });
 
-  // Rotate claim code
-  fastify.post('/admin/rotate-claim', { preHandler: requireAdmin }, async () => {
+  // Rotate claim code (rate limited)
+  fastify.post('/admin/rotate-claim', {
+    preHandler: requireAdmin,
+    config: { rateLimit: { max: 10, timeWindow: '10 minutes' } },
+  }, async () => {
     const newCode = randomClaimCode();
     const newHash = await argon2.hash(newCode);
 
@@ -82,7 +89,10 @@ async function adminRoutes(fastify) {
   });
 
   // Reset stream state (new game)
-  fastify.post('/admin/reset', { preHandler: requireAdmin }, async () => {
+  fastify.post('/admin/reset', {
+    preHandler: requireAdmin,
+    config: { rateLimit: { max: 10, timeWindow: '10 minutes' } },
+  }, async () => {
     const streamId = process.env.STREAM_ID || 'main';
 
     await prisma.streamState.update({

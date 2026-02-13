@@ -6,6 +6,8 @@ const secureSession = require('@fastify/secure-session');
 const adminRoutes = require('./routes/admin');
 const path = require('path');
 const fastifyStatic = require('@fastify/static');
+const cors = require('@fastify/cors');
+const rateLimit = require('@fastify/rate-limit');
   
 'use strict';
 
@@ -17,6 +19,7 @@ const fastify = require('fastify')({
 
 fastify.register(cookie);
 
+// Secure session
 fastify.register(secureSession, {
     secret: Buffer.from(process.env.SESSION_SECRET_HEX, 'hex'),
     cookie: {
@@ -25,6 +28,32 @@ fastify.register(secureSession, {
       secure: true,
       sameSite: 'lax',
     },
+  });
+
+  // CORS
+const allowedOrigins = (process.env.CORS_ORIGINS || '')
+.split(',')
+.map(s => s.trim())
+.filter(Boolean);
+
+// If you don't set CORS_ORIGINS, default to allowing none (safer).
+await fastify.register(cors, {
+origin: (origin, cb) => {
+  // No Origin header = curl/native apps/server-to-server -> allow
+  if (!origin) return cb(null, true);
+
+  // Allow if configured
+  if (allowedOrigins.includes(origin)) return cb(null, true);
+
+  // Otherwise block
+  return cb(new Error('Not allowed by CORS'), false);
+},
+credentials: true, // admin session cookie
+});
+
+// Rate limiting
+await fastify.register(rateLimit, {
+    global: false, // käytetään per-route
   });
 
 fastify.register(publicRoutes);
@@ -43,8 +72,12 @@ fastify.get('/health', async () => {
   return { ok: true };
 });
 
-fastify.get('/__routes', async () => {
-    return fastify.printRoutes();
+//fastify.get('/__routes', async () => {
+//    return fastify.printRoutes();
+//  });
+
+  fastify.get('/admin', (request, reply) => {
+    reply.sendFile('admin.html');
   });
 
 async function start() {
