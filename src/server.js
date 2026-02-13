@@ -18,7 +18,7 @@ const writerRoutes = require('./routes/writer');
 const adminRoutes = require('./routes/admin');
 
 const PORT = Number(process.env.PORT || 3000);
-const HOST = process.env.HOST || '0.0.0.0');
+const HOST = process.env.HOST || '0.0.0.0';
 
 function parseAllowedOrigins() {
   return (process.env.CORS_ORIGINS || '')
