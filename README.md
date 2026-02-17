@@ -56,6 +56,10 @@ POST /score { “team”: “home”, “gameClockSeconds”: 610, “scorer”:
 
 Idempotent via requestId.
 
+POST /update_result { “homeTeamName”: “Team A”, “awayTeamName”: “Team B”,
+“HomeScore”: “12”, “awayScore”: “7”, “lastScore”: “teamName”,
+“lastScorer”: “PlayerName”, “lastAssist”: “PlayerName” }
+
 ------------------------------------------------------------------------
 
 ADMIN ENDPOINTS (Session-based)
@@ -109,4 +113,4 @@ FUTURE IMPROVEMENTS
 -   WebSocket live push
 -   Event feed history
 -   Timeout & halftime endpoints
-s
+
