@@ -96,6 +96,48 @@
     <div id="teamsResult" class="success"></div>
   </div>
 
+  <!-- UPDATE RESULT -->
+  <div class="card">
+    <h2>Update Result</h2>
+
+    <label>
+      Home Score:
+      <input type="number" id="homeScoreInput" value="0" min="0" />
+    </label>
+    <br><br>
+
+    <label>
+      Away Score:
+      <input type="number" id="awayScoreInput" value="0" min="0" />
+    </label>
+    <br><br>
+
+    <label>
+      Last Score Team:
+      <select id="lastScoreTeamSelect">
+        <option value="">(none)</option>
+        <option value="home">Home</option>
+        <option value="away">Away</option>
+      </select>
+    </label>
+    <br><br>
+
+    <label>
+      Last Scorer:
+      <input id="lastScorerInput" placeholder="Optional" />
+    </label>
+    <br><br>
+
+    <label>
+      Last Assist:
+      <input id="lastAssistInput" placeholder="Optional" />
+    </label>
+    <br><br>
+
+    <button onclick="updateResult()">Update Result</button>
+    <div id="updateResultMsg" class="success"></div>
+  </div>
+
   <!-- ADD GOAL -->
   <div class="card">
     <h2>Add Goal</h2>
@@ -194,6 +236,12 @@ async function loadState() {
     document.getElementById("homeTeamInput").value = data.state.homeTeamName || "";
     document.getElementById("awayTeamInput").value = data.state.awayTeamName || "";
     document.getElementById("goalClock").value = data.state.gameClockSeconds || 0;
+
+    document.getElementById("homeScoreInput").value = data.state.homeScore ?? 0;
+    document.getElementById("awayScoreInput").value = data.state.awayScore ?? 0;
+    document.getElementById("lastScoreTeamSelect").value = data.state.lastScoreTeam || "";
+    document.getElementById("lastScorerInput").value = data.state.lastScorer || "";
+    document.getElementById("lastAssistInput").value = data.state.lastAssist || "";
   }
 }
 
@@ -217,6 +265,43 @@ async function updateTeams() {
     loadState();
   } else {
     resultEl.innerText = "Failed to update teams.";
+  }
+}
+
+async function updateResult() {
+  const homeTeamName = document.getElementById("homeTeamInput").value;
+  const awayTeamName = document.getElementById("awayTeamInput").value;
+  const HomeScore = String(Number(document.getElementById("homeScoreInput").value));
+  const awayScore = String(Number(document.getElementById("awayScoreInput").value));
+  const lastScoreTeam = document.getElementById("lastScoreTeamSelect").value;
+  const lastScorer = document.getElementById("lastScorerInput").value;
+  const lastAssist = document.getElementById("lastAssistInput").value;
+
+  const body = {
+    homeTeamName,
+    awayTeamName,
+    HomeScore,
+    awayScore,
+    lastScorer,
+    lastAssist,
+  };
+
+  if (lastScoreTeam) {
+    body.lastScore = lastScoreTeam;
+  }
+
+  const res = await fetch("/update_result", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  });
+
+  const msgEl = document.getElementById("updateResultMsg");
+  if (res.ok) {
+    msgEl.innerText = "Result updated.";
+    loadState();
+  } else {
+    msgEl.innerText = "Failed to update result.";
   }
 }
 
