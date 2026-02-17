@@ -192,6 +192,25 @@
 
 <script>
 
+async function readResponseBody(res) {
+  const contentType = res.headers.get("content-type") || "";
+  try {
+    if (contentType.includes("application/json")) {
+      return await res.json();
+    }
+    return await res.text();
+  } catch (_) {
+    return null;
+  }
+}
+
+function setResult(el, ok, message) {
+  if (!el) return;
+  el.classList.remove("success", "error");
+  el.classList.add(ok ? "success" : "error");
+  el.innerText = message;
+}
+
 async function login() {
   const password = document.getElementById("password").value;
   const errorEl = document.getElementById("loginError");
@@ -199,12 +218,14 @@ async function login() {
 
   const res = await fetch("/admin/login", {
     method: "POST",
+    credentials: "same-origin",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ password })
   });
 
   if (!res.ok) {
-    errorEl.innerText = "Login failed";
+    const body = await readResponseBody(res);
+    errorEl.innerText = "Login failed: " + res.status + (body && body.error ? " (" + body.error + ")" : "");
     return;
   }
 
@@ -215,13 +236,18 @@ async function login() {
 }
 
 async function logout() {
-  await fetch("/admin/logout", { method: "POST" });
+  await fetch("/admin/logout", { method: "POST", credentials: "same-origin" });
   location.reload();
 }
 
 async function loadState() {
-  const res = await fetch("/admin/state");
-  if (!res.ok) return;
+  const res = await fetch("/admin/state", { credentials: "same-origin" });
+  if (!res.ok) {
+    const body = await readResponseBody(res);
+    document.getElementById("stateView").innerText =
+      "Failed to load state: " + res.status + (body && body.error ? " (" + body.error + ")" : "");
+    return;
+  }
 
   const data = await res.json();
 
@@ -251,6 +277,7 @@ async function updateTeams() {
 
   const res = await fetch("/teams", {
     method: "PUT",
+    credentials: "same-origin",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       homeTeamName: home,
@@ -261,10 +288,11 @@ async function updateTeams() {
   const resultEl = document.getElementById("teamsResult");
 
   if (res.ok) {
-    resultEl.innerText = "Teams updated.";
+    setResult(resultEl, true, "Teams updated.");
     loadState();
   } else {
-    resultEl.innerText = "Failed to update teams.";
+    const body = await readResponseBody(res);
+    setResult(resultEl, false, "Failed to update teams: " + res.status + (body && body.error ? " (" + body.error + ")" : ""));
   }
 }
 
@@ -292,16 +320,22 @@ async function updateResult() {
 
   const res = await fetch("/update_result", {
     method: "POST",
+    credentials: "same-origin",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body)
   });
 
   const msgEl = document.getElementById("updateResultMsg");
   if (res.ok) {
-    msgEl.innerText = "Result updated.";
+    setResult(msgEl, true, "Result updated.");
     loadState();
   } else {
-    msgEl.innerText = "Failed to update result.";
+    const respBody = await readResponseBody(res);
+    setResult(
+      msgEl,
+      false,
+      "Failed to update result: " + res.status + (respBody && respBody.error ? " (" + respBody.error + ")" : "")
+    );
   }
 }
 
@@ -315,6 +349,7 @@ async function addGoal() {
 
   const res = await fetch("/score", {
     method: "POST",
+    credentials: "same-origin",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       team,
@@ -328,10 +363,11 @@ async function addGoal() {
   const resultEl = document.getElementById("goalResult");
 
   if (res.ok) {
-    resultEl.innerText = "Goal added.";
+    setResult(resultEl, true, "Goal added.");
     loadState();
   } else {
-    resultEl.innerText = "Failed to add goal.";
+    const body = await readResponseBody(res);
+    setResult(resultEl, false, "Failed to add goal: " + res.status + (body && body.error ? " (" + body.error + ")" : ""));
   }
 }
 
