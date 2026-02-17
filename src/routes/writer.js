@@ -143,51 +143,89 @@ async function writerRoutes(fastify) {
   }, async (request, reply) => {
     const body = request.body || {};
 
-    const homeTeamName = typeof body.homeTeamName === 'string' ? body.homeTeamName.trim() : '';
-    const awayTeamName = typeof body.awayTeamName === 'string' ? body.awayTeamName.trim() : '';
-    const homeScoreRaw = body.homeScore ?? body.HomeScore; // accept both
-    const awayScoreRaw = body.awayScore ?? body.AwayScore; // accept both
-    const lastScoreRaw = typeof body.lastScore === 'string' ? body.lastScore.trim() : '';
-    const lastScorer = typeof body.lastScorer === 'string' ? body.lastScorer.trim() : null;
-    const lastAssist = typeof body.lastAssist === 'string' ? body.lastAssist.trim() : null;
+    const streamId = process.env.STREAM_ID || 'main';
 
-    if (!homeTeamName || !awayTeamName) {
-      return reply.code(400).send({ error: 'homeTeamName and awayTeamName required' });
+    const updateData = {};
+
+    // All fields optional. Only apply fields that are present.
+    if (typeof body.homeTeamName === 'string') {
+      const v = body.homeTeamName.trim();
+      if (v) updateData.homeTeamName = v;
+    }
+    if (typeof body.awayTeamName === 'string') {
+      const v = body.awayTeamName.trim();
+      if (v) updateData.awayTeamName = v;
     }
 
-    const homeScore = Number.parseInt(String(homeScoreRaw ?? ''), 10);
-    const awayScore = Number.parseInt(String(awayScoreRaw ?? ''), 10);
-    if (!Number.isFinite(homeScore) || homeScore < 0 || !Number.isFinite(awayScore) || awayScore < 0) {
-      return reply.code(400).send({ error: 'valid homeScore/HomeScore and awayScore required' });
+    const hasHomeScore = body.homeScore !== undefined || body.HomeScore !== undefined;
+    if (hasHomeScore) {
+      const homeScoreRaw = body.homeScore ?? body.HomeScore;
+      const homeScore = Number.parseInt(String(homeScoreRaw ?? ''), 10);
+      if (!Number.isFinite(homeScore) || homeScore < 0) {
+        return reply.code(400).send({ error: 'valid homeScore/HomeScore required' });
+      }
+      updateData.homeScore = homeScore;
     }
 
-    let lastScoreTeam = null;
-    if (lastScoreRaw) {
-      const ls = lastScoreRaw.toLowerCase();
-      if (ls === 'home' || ls === 'away') {
-        lastScoreTeam = ls;
-      } else if (lastScoreRaw === homeTeamName) {
-        lastScoreTeam = 'home';
-      } else if (lastScoreRaw === awayTeamName) {
-        lastScoreTeam = 'away';
+    const hasAwayScore = body.awayScore !== undefined || body.AwayScore !== undefined;
+    if (hasAwayScore) {
+      const awayScoreRaw = body.awayScore ?? body.AwayScore;
+      const awayScore = Number.parseInt(String(awayScoreRaw ?? ''), 10);
+      if (!Number.isFinite(awayScore) || awayScore < 0) {
+        return reply.code(400).send({ error: 'valid awayScore required' });
+      }
+      updateData.awayScore = awayScore;
+    }
+
+    if (body.lastScorer !== undefined) {
+      const v = typeof body.lastScorer === 'string' ? body.lastScorer.trim() : '';
+      updateData.lastScorer = v ? v : null;
+    }
+    if (body.lastAssist !== undefined) {
+      const v = typeof body.lastAssist === 'string' ? body.lastAssist.trim() : '';
+      updateData.lastAssist = v ? v : null;
+    }
+
+    if (body.lastScore !== undefined) {
+      const lastScoreRaw = typeof body.lastScore === 'string' ? body.lastScore.trim() : '';
+
+      // Allow clearing if passed as empty string / null-ish
+      if (!lastScoreRaw) {
+        updateData.lastScoreTeam = null;
       } else {
-        return reply.code(400).send({ error: 'lastScore must be "home", "away", homeTeamName, or awayTeamName' });
+        const ls = lastScoreRaw.toLowerCase();
+        if (ls === 'home' || ls === 'away') {
+          updateData.lastScoreTeam = ls;
+        } else {
+          // Map team name string -> "home"/"away". Use provided names if present,
+          // otherwise fall back to current stored team names.
+          let homeName = updateData.homeTeamName;
+          let awayName = updateData.awayTeamName;
+
+          if (!homeName || !awayName) {
+            const current = await prisma.streamState.findUnique({ where: { streamId } });
+            homeName = homeName || current?.homeTeamName || '';
+            awayName = awayName || current?.awayTeamName || '';
+          }
+
+          if (lastScoreRaw === homeName) {
+            updateData.lastScoreTeam = 'home';
+          } else if (lastScoreRaw === awayName) {
+            updateData.lastScoreTeam = 'away';
+          } else {
+            return reply.code(400).send({ error: 'lastScore must be "home", "away", homeTeamName, or awayTeamName' });
+          }
+        }
       }
     }
 
-    const streamId = process.env.STREAM_ID || 'main';
+    if (Object.keys(updateData).length === 0) {
+      return { ok: true, noop: true };
+    }
 
     await prisma.streamState.update({
       where: { streamId },
-      data: {
-        homeTeamName,
-        awayTeamName,
-        homeScore,
-        awayScore,
-        lastScoreTeam,
-        lastScorer,
-        lastAssist,
-      },
+      data: updateData,
     });
 
     return { ok: true };
