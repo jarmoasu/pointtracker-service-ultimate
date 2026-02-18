@@ -66,7 +66,7 @@ ADMIN ENDPOINTS (Session-based)
 
 POST /admin/login { “password”: “” }
 
-GET /admin/state
+GET /admin/state (public, rate limited)
 
 POST /admin/rotate-claim Returns new claim code.
 

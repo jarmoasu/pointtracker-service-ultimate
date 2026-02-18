@@ -11,6 +11,11 @@ function randomClaimCode() {
 }
 
 async function adminRoutes(fastify) {
+  // Small cache for public state endpoint to reduce DB load under bursts
+  let publicStateCache = null;
+  let publicStateCacheAt = 0;
+  const PUBLIC_STATE_CACHE_TTL_MS = 1000;
+
   // Login (no session required)
   fastify.post('/admin/login', {
     config: {
@@ -49,8 +54,17 @@ async function adminRoutes(fastify) {
     return { ok: true };
   });
 
-  // View state (admin)
-  fastify.get('/admin/state', { preHandler: requireAdmin }, async () => {
+  // View state (public, rate limited)
+  fastify.get('/admin/state', {
+    config: {
+      rateLimit: { max: 60, timeWindow: '1 minute' },
+    },
+  }, async () => {
+    const now = Date.now();
+    if (publicStateCache && (now - publicStateCacheAt) < PUBLIC_STATE_CACHE_TTL_MS) {
+      return publicStateCache;
+    }
+
     const streamId = process.env.STREAM_ID || 'main';
 
     const [state, auth] = await Promise.all([
@@ -58,7 +72,7 @@ async function adminRoutes(fastify) {
       prisma.authState.findUnique({ where: { id: 1 } }),
     ]);
 
-    return {
+    const payload = {
       streamId,
       state,
       writer: auth
@@ -69,6 +83,10 @@ async function adminRoutes(fastify) {
           }
         : null,
     };
+
+    publicStateCache = payload;
+    publicStateCacheAt = now;
+    return payload;
   });
 
   // Rotate claim code (rate limited)
