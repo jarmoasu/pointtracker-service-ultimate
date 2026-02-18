@@ -10,6 +10,15 @@ function randomClaimCode() {
   return crypto.randomBytes(4).toString('hex'); // e.g. "a1b2c3d4"
 }
 
+function normalizeClaimCode(value) {
+  return typeof value === 'string' ? value.trim().toLowerCase() : '';
+}
+
+function isValidClaimCode(value) {
+  // 8 hex chars to match the generated format from randomClaimCode()
+  return /^[a-f0-9]{8}$/.test(value);
+}
+
 async function adminRoutes(fastify) {
   // Small cache for public state endpoint to reduce DB load under bursts
   let publicStateCache = null;
@@ -89,6 +98,35 @@ async function adminRoutes(fastify) {
     return payload;
   });
 
+  // Current claim code (admin only)
+  fastify.get('/admin/claim-code', { preHandler: requireAdmin }, async () => {
+    const auth = await prisma.authState.findUnique({ where: { id: 1 } });
+    return { claimCode: auth?.claimCodePlaintext || null };
+  });
+
+  // Set claim code manually (admin only)
+  fastify.post('/admin/set-claim', {
+    preHandler: requireAdmin,
+    config: { rateLimit: { max: 20, timeWindow: '10 minutes' } },
+  }, async (request, reply) => {
+    const raw = request.body?.claimCode;
+    const claimCode = normalizeClaimCode(raw);
+    if (!isValidClaimCode(claimCode)) {
+      return reply.code(400).send({ error: 'claimCode must be exactly 8 hex characters (0-9, a-f)' });
+    }
+
+    const claimCodeHash = await argon2.hash(claimCode);
+    await prisma.authState.update({
+      where: { id: 1 },
+      data: {
+        claimCodeHash,
+        claimCodePlaintext: claimCode,
+      },
+    });
+
+    return { ok: true, claimCode };
+  });
+
   // Rotate claim code (rate limited)
   fastify.post('/admin/rotate-claim', {
     preHandler: requireAdmin,
@@ -99,7 +137,10 @@ async function adminRoutes(fastify) {
 
     await prisma.authState.update({
       where: { id: 1 },
-      data: { claimCodeHash: newHash },
+      data: {
+        claimCodeHash: newHash,
+        claimCodePlaintext: newCode,
+      },
     });
 
     // Return the new code so admin can share it (or show QR in Sprint 9)

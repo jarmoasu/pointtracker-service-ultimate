@@ -177,7 +177,13 @@
   <div class="card">
     <h2>Rotate Claim Code</h2>
     <button onclick="rotateClaim()">Generate New Claim Code</button>
-    <div id="claimResult"></div>
+    <br><br>
+    <label>
+      Set Claim Code (8 hex chars):
+      <input id="setClaimInput" placeholder="e.g. a1b2c3d4" maxlength="8" />
+    </label>
+    <button onclick="setClaimCode()">Set Manually</button>
+    <div id="claimResult">Current claim code: (not loaded)</div>
   </div>
 
   <!-- RESET -->
@@ -209,6 +215,14 @@ function setResult(el, ok, message) {
   el.classList.remove("success", "error");
   el.classList.add(ok ? "success" : "error");
   el.innerText = message;
+}
+
+function normalizeClaimCodeInput(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function isValidClaimCode(value) {
+  return /^[a-f0-9]{8}$/.test(value);
 }
 
 async function login() {
@@ -269,6 +283,8 @@ async function loadState() {
     document.getElementById("lastScorerInput").value = data.state.lastScorer || "";
     document.getElementById("lastAssistInput").value = data.state.lastAssist || "";
   }
+
+  await loadClaimCode();
 }
 
 async function updateTeams() {
@@ -372,12 +388,18 @@ async function addGoal() {
 }
 
 async function rotateClaim() {
-  const res = await fetch("/admin/rotate-claim", { method: "POST" });
-  if (!res.ok) return;
+  const res = await fetch("/admin/rotate-claim", { method: "POST", credentials: "same-origin" });
+  const claimEl = document.getElementById("claimResult");
+  if (!res.ok) {
+    const body = await readResponseBody(res);
+    setResult(claimEl, false, "Failed to rotate claim code: " + res.status + (body && body.error ? " (" + body.error + ")" : ""));
+    return;
+  }
 
   const data = await res.json();
-  document.getElementById("claimResult").innerText =
-    "New claim code: " + data.claimCode;
+  setResult(claimEl, true, "Current claim code: " + data.claimCode);
+  document.getElementById("setClaimInput").value = data.claimCode || "";
+  await loadClaimCode();
 }
 
 async function resetGame() {
@@ -387,6 +409,48 @@ async function resetGame() {
   if (res.ok) {
     loadState();
   }
+}
+
+async function loadClaimCode() {
+  const claimEl = document.getElementById("claimResult");
+  const res = await fetch("/admin/claim-code", { credentials: "same-origin" });
+  if (!res.ok) {
+    const body = await readResponseBody(res);
+    setResult(claimEl, false, "Current claim code unavailable: " + res.status + (body && body.error ? " (" + body.error + ")" : ""));
+    return;
+  }
+
+  const data = await res.json();
+  setResult(claimEl, true, "Current claim code: " + (data.claimCode || "(not set)"));
+  document.getElementById("setClaimInput").value = data.claimCode || "";
+}
+
+async function setClaimCode() {
+  const claimEl = document.getElementById("claimResult");
+  const inputEl = document.getElementById("setClaimInput");
+  const claimCode = normalizeClaimCodeInput(inputEl.value);
+
+  if (!isValidClaimCode(claimCode)) {
+    setResult(claimEl, false, "Invalid claim code. Use exactly 8 hex chars (0-9, a-f).");
+    return;
+  }
+
+  const res = await fetch("/admin/set-claim", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ claimCode })
+  });
+
+  if (!res.ok) {
+    const body = await readResponseBody(res);
+    setResult(claimEl, false, "Failed to set claim code: " + res.status + (body && body.error ? " (" + body.error + ")" : ""));
+    return;
+  }
+
+  const data = await res.json();
+  setResult(claimEl, true, "Current claim code: " + (data.claimCode || claimCode));
+  inputEl.value = data.claimCode || claimCode;
 }
 
 </script>

@@ -68,6 +68,10 @@ POST /admin/login { “password”: “” }
 
 GET /admin/state (public, rate limited)
 
+GET /admin/claim-code (session required)
+
+POST /admin/set-claim { "claimCode": "a1b2c3d4" } (session required, 8 hex chars)
+
 POST /admin/rotate-claim Returns new claim code.
 
 POST /admin/reset Resets stream state and clears writer.

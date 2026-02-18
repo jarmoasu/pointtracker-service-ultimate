@@ -48,11 +48,19 @@ async function ensureInitialized() {
         id: 1,
         adminPasswordHash,
         claimCodeHash,
+        claimCodePlaintext: claimCode,
         activeWriteTokenHash: null,
         activeWriterName: null,
         claimedAt: null,
         lastRequestId: null,
       },
+    });
+  } else if (!existing.claimCodePlaintext) {
+    // Backfill for older rows where plaintext is missing.
+    // We cannot recover from hash, so seed from current env value.
+    await prisma.authState.update({
+      where: { id: 1 },
+      data: { claimCodePlaintext: claimCode },
     });
   }
 
