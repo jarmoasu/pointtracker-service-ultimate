@@ -1,9 +1,6 @@
--- CreateSchema
-CREATE SCHEMA IF NOT EXISTS "public";
-
 -- CreateTable
 CREATE TABLE "StreamState" (
-    "streamId" TEXT NOT NULL,
+    "streamId" TEXT NOT NULL PRIMARY KEY,
     "homeTeamName" TEXT NOT NULL DEFAULT '',
     "awayTeamName" TEXT NOT NULL DEFAULT '',
     "homeScore" INTEGER NOT NULL DEFAULT 0,
@@ -13,24 +10,20 @@ CREATE TABLE "StreamState" (
     "lastScorer" TEXT,
     "lastAssist" TEXT,
     "lastScoreClockSeconds" INTEGER,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "StreamState_pkey" PRIMARY KEY ("streamId")
+    "updatedAt" DATETIME NOT NULL,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- CreateTable
 CREATE TABLE "AuthState" (
-    "id" INTEGER NOT NULL DEFAULT 1,
+    "id" INTEGER NOT NULL PRIMARY KEY DEFAULT 1,
     "claimCodeHash" TEXT NOT NULL,
+    "claimCodePlaintext" TEXT,
     "activeWriteTokenHash" TEXT,
     "activeWriterName" TEXT,
-    "claimedAt" TIMESTAMP(3),
+    "claimedAt" DATETIME,
     "lastRequestId" TEXT,
     "adminPasswordHash" TEXT NOT NULL,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "AuthState_pkey" PRIMARY KEY ("id")
+    "updatedAt" DATETIME NOT NULL,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-

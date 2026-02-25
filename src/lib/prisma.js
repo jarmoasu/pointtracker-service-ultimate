@@ -1,17 +1,14 @@
 'use strict';
 
 const { PrismaClient } = require('@prisma/client');
-const { PrismaPg } = require('@prisma/adapter-pg');
+const { PrismaBetterSqlite3 } = require('@prisma/adapter-better-sqlite3');
 
 const globalForPrisma = globalThis;
 
-const connectionString = process.env.DATABASE_URL;
+const url = process.env.DATABASE_URL;
+if (!url) throw new Error('DATABASE_URL is not set');
 
-if (!connectionString) {
-  throw new Error('DATABASE_URL is not set');
-}
-
-const adapter = new PrismaPg({ connectionString });
+const adapter = new PrismaBetterSqlite3({ url });
 
 const prisma = globalForPrisma.__prisma || new PrismaClient({ adapter });
 

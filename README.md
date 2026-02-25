@@ -19,8 +19,8 @@ overlays - A minimal admin control panel
 
 ARCHITECTURE
 
-Runtime: Node.js (v20) Framework: Fastify Database: PostgreSQL ORM:
-Prisma Hosting: Render
+Runtime: Node.js (v20) Framework: Fastify Database: SQLite (via
+better-sqlite3) ORM: Prisma Hosting: Render
 
 Authentication: - Writer: Bearer token (claim-based) - Admin:
 secure-session cookie
@@ -100,8 +100,11 @@ SECURITY
 
 ENVIRONMENT VARIABLES
 
-DATABASE_URL=postgresql://… STREAM_ID=main ADMIN_PASSWORD=your-password
-SESSION_SECRET_HEX=<64 hex chars> CORS_ORIGINS=https://yourdomain.com
+DATABASE_URL=file:/var/sqlite/db.sqlite
+STREAM_ID=main
+ADMIN_PASSWORD=your-password
+SESSION_SECRET=<random string>
+CORS_ORIGINS=https://yourdomain.com
 
 Generate session secret: openssl rand -hex 32
 
@@ -109,6 +112,15 @@ Generate session secret: openssl rand -hex 32
 
 DEPLOYMENT (Render)
 
+1. Create a Web Service pointing to this repo.
+2. Set Build Command:  npm install
+   Set Start Command:  npm start
+3. Add a Persistent Disk with mount path /var/sqlite (any size, 1 GB is
+   plenty for this workload).
+4. Set the environment variables listed above. DATABASE_URL must point
+   to the persistent disk: file:/var/sqlite/db.sqlite
+5. Deploy. On first boot, Prisma creates the SQLite file and runs the
+   migration automatically. Subsequent deploys leave existing data intact.
 
 ------------------------------------------------------------------------
 
