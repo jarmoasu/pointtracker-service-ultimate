@@ -80,14 +80,28 @@ async function writerRoutes(fastify) {
     }
 
     const streamId = process.env.STREAM_ID || 'main';
+    const home = homeTeamName.trim();
+    const away = awayTeamName.trim();
 
-    await prisma.streamState.update({
+    const current = await prisma.streamState.findUnique({
       where: { streamId },
-      data: {
-        homeTeamName: homeTeamName.trim(),
-        awayTeamName: awayTeamName.trim(),
-      },
+      select: { homeTeamName: true, awayTeamName: true },
     });
+
+    const namesChanged = !current || current.homeTeamName !== home || current.awayTeamName !== away;
+
+    const updateData = { homeTeamName: home, awayTeamName: away };
+
+    if (namesChanged) {
+      updateData.homeScore = 0;
+      updateData.awayScore = 0;
+      updateData.lastScoreTeam = null;
+      updateData.lastScorer = null;
+      updateData.lastAssist = null;
+      updateData.lastScoreClockSeconds = null;
+    }
+
+    await prisma.streamState.update({ where: { streamId }, data: updateData });
 
     return { ok: true };
   });

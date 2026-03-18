@@ -10,9 +10,6 @@
       --color-bg-panel:        rgba(8, 10, 18, 0.90);
       --color-bg-panel-alt:    rgba(14, 17, 30, 0.88);
       --color-accent:          #00c2ff;
-      --color-accent-dim:      rgba(0, 194, 255, 0.15);
-      --color-accent-border:   rgba(0, 194, 255, 0.22);
-      --color-live:            #ff3b3b;
       --color-score-flash:     #ffe066;
       --color-text-primary:    #ffffff;
       --color-text-secondary:  rgba(255, 255, 255, 0.55);
@@ -42,51 +39,6 @@
       font-family: var(--font-ui);
       -webkit-font-smoothing: antialiased;
       text-rendering: optimizeLegibility;
-    }
-
-    /* ─── LIVE BADGE ────────────────────────────────────────────────────────── */
-    #live-badge {
-      position: absolute;
-      top: 44px;
-      left: 60px;
-      display: flex;
-      align-items: center;
-      gap: 9px;
-      background: var(--color-bg-panel);
-      border: 1px solid rgba(255, 59, 59, 0.30);
-      border-radius: var(--radius-sm);
-      padding: 7px 16px 7px 12px;
-      opacity: 0;
-      transform: translateY(-6px);
-      transition: opacity var(--transition), transform var(--transition);
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.45);
-    }
-
-    #live-badge.visible {
-      opacity: 1;
-      transform: translateY(0);
-    }
-
-    .live-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: var(--color-live);
-      flex-shrink: 0;
-      animation: blink 1.6s ease-in-out infinite;
-    }
-
-    .live-text {
-      font-size: 12px;
-      font-weight: 800;
-      letter-spacing: 3px;
-      color: var(--color-live);
-      text-transform: uppercase;
-    }
-
-    @keyframes blink {
-      0%, 100% { opacity: 1; }
-      50%       { opacity: 0.25; }
     }
 
     /* ─── UPDATED TIME ──────────────────────────────────────────────────────── */
@@ -130,7 +82,7 @@
       bottom: 86px;
       left: 50%;
       transform: translateX(-50%) translateY(14px);
-      width: 860px;
+      width: 720px;
       height: 74px;
       display: flex;
       align-items: stretch;
@@ -179,7 +131,6 @@
     .team-panel.away {
       flex-direction: row-reverse;
       justify-content: flex-end;
-      border-left: 1px solid var(--color-divider);
     }
 
     .team-name {
@@ -212,37 +163,6 @@
       0%   { color: var(--color-score-flash); transform: scale(1.30); }
       50%  { color: var(--color-score-flash); transform: scale(1.12); }
       100% { color: var(--color-text-primary); transform: scale(1); }
-    }
-
-    /* Center clock block */
-    #clock-block {
-      width: 136px;
-      flex-shrink: 0;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      background: linear-gradient(180deg, var(--color-accent-dim) 0%, rgba(0,194,255,0.04) 100%);
-      border-left: 1px solid var(--color-accent-border);
-      border-right: 1px solid var(--color-accent-border);
-      gap: 3px;
-    }
-
-    #game-clock {
-      font-size: 26px;
-      font-weight: 800;
-      font-family: var(--font-mono);
-      letter-spacing: 3px;
-      color: var(--color-accent);
-      line-height: 1;
-    }
-
-    #clock-label {
-      font-size: 9px;
-      font-weight: 700;
-      letter-spacing: 2.5px;
-      text-transform: uppercase;
-      color: var(--color-text-secondary);
     }
 
     /* ─── GOAL NOTIFICATION ─────────────────────────────────────────────────── */
@@ -325,11 +245,6 @@
 </head>
 <body>
 
-  <div id="live-badge">
-    <span class="live-dot"></span>
-    <span class="live-text">Live</span>
-  </div>
-
   <div id="updated-time"></div>
 
   <div id="error-indicator">Connection error — retrying&hellip;</div>
@@ -338,10 +253,6 @@
     <div class="team-panel home">
       <span class="team-name" id="home-name">—</span>
       <span class="team-score" id="home-score">0</span>
-    </div>
-    <div id="clock-block">
-      <span id="game-clock">00:00</span>
-      <span id="clock-label">Clock</span>
     </div>
     <div class="team-panel away">
       <span class="team-score" id="away-score">0</span>
@@ -375,7 +286,6 @@
 
     // ─── DOM REFS ─────────────────────────────────────────────────────────────
     const el = {
-      liveBadge:   document.getElementById('live-badge'),
       updatedTime: document.getElementById('updated-time'),
       errorInd:    document.getElementById('error-indicator'),
       scoreboard:  document.getElementById('scoreboard'),
@@ -383,7 +293,6 @@
       awayName:    document.getElementById('away-name'),
       homeScore:   document.getElementById('home-score'),
       awayScore:   document.getElementById('away-score'),
-      gameClock:   document.getElementById('game-clock'),
       goalNotif:   document.getElementById('goal-notification'),
       goalTeam:    document.getElementById('goal-team-name'),
       goalScorer:  document.getElementById('goal-scorer'),
@@ -441,7 +350,7 @@
 
       el.goalTeam.textContent   = resolveTeamLabel(ls.team, data).toUpperCase();
       el.goalScorer.textContent = ls.scorer || '';
-      el.goalAssist.textContent = ls.assist ? `Assist: ${ls.assist}` : '';
+      el.goalAssist.textContent = ls.assist ? `Assist: ${ls.assist}` : 'Callahan!';
       el.goalClock.textContent  = ls.gameClockSeconds != null
         ? `at ${formatClock(ls.gameClockSeconds)}`
         : '';
@@ -461,20 +370,29 @@
       el.homeName.textContent = data.homeTeamName || '—';
       el.awayName.textContent = data.awayTeamName || '—';
 
-      // Scores with flash on change
+      // Detect a new game: either team name changed since last render
+      const newGame = !firstRender && prev && (
+        (data.homeTeamName || '') !== (prev.homeTeamName || '') ||
+        (data.awayTeamName || '') !== (prev.awayTeamName || '')
+      );
+
+      if (newGame) {
+        // Dismiss goal panel immediately; scores will update without flash
+        show(el.goalNotif, false);
+        if (goalTimer) { clearTimeout(goalTimer); goalTimer = null; }
+      }
+
+      // Scores with flash on change (never flash on a new-game reset)
       const homeScore = data.homeScore ?? 0;
       const awayScore = data.awayScore ?? 0;
 
-      if (!firstRender && prev) {
+      if (!firstRender && prev && !newGame) {
         if (homeScore !== (prev.homeScore ?? 0)) flashScore(el.homeScore);
         if (awayScore !== (prev.awayScore ?? 0)) flashScore(el.awayScore);
       }
 
       el.homeScore.textContent = homeScore;
       el.awayScore.textContent = awayScore;
-
-      // Clock
-      el.gameClock.textContent = formatClock(data.gameClockSeconds);
 
       // Updated time
       el.updatedTime.textContent = formatUpdatedAt(data.updatedAt);
@@ -488,20 +406,19 @@
           // Populate silently on first load; show without animation trigger
           el.goalTeam.textContent   = resolveTeamLabel(ls.team, data).toUpperCase();
           el.goalScorer.textContent = ls.scorer || '';
-          el.goalAssist.textContent = ls.assist ? `Assist: ${ls.assist}` : '';
+          el.goalAssist.textContent = ls.assist ? `Assist: ${ls.assist}` : 'Callahan!';
           el.goalClock.textContent  = ls.gameClockSeconds != null
             ? `at ${formatClock(ls.gameClockSeconds)}`
             : '';
           show(el.goalNotif, true);
           goalTimer = setTimeout(() => show(el.goalNotif, false), GOAL_DISPLAY_MS);
-        } else if (goalKey(ls) !== goalKey(prevLs)) {
+        } else if (!newGame && goalKey(ls) !== goalKey(prevLs)) {
           showGoalPanel(ls, data);
         }
       }
 
       // Show persistent panels
       show(el.scoreboard, true);
-      show(el.liveBadge, true);
       show(el.updatedTime, true);
       show(el.errorInd, false);
 
