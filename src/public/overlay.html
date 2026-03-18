@@ -441,6 +441,24 @@
       }
     }
 
+    // ─── TEST MODE — remove this block when the overlay is confirmed working ──
+    const TEST_MODE = true;
+    const TEST_DATA = {
+      homeTeamName: 'Crimson Sky Dragons',
+      awayTeamName: 'Neon Pulse Titans',
+      homeScore: 2,
+      awayScore: 1,
+      updatedAt: new Date().toISOString(),
+      lastScore: {
+        team: 'home',
+        scorer: 'Axel Storm #37',
+        assist: null,
+        gameClockSeconds: null,
+      },
+    };
+    if (TEST_MODE) { render(TEST_DATA); }
+    // ─────────────────────────────────────────────────────────────────────────
+
     // ─── BOOT ────────────────────────────────────────────────────────────────
     poll();
     setInterval(poll, POLL_MS);
