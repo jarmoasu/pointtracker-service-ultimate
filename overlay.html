@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=1920" />
+  <title>Game Overlay</title>
+  <style>
+    /* ─── CSS VARIABLES — edit here to retheme ─────────────────────────────── */
+    :root {
+      --color-bg-panel:        rgba(8, 10, 18, 0.90);
+      --color-bg-panel-alt:    rgba(14, 17, 30, 0.88);
+      --color-accent:          #00c2ff;
+      --color-accent-dim:      rgba(0, 194, 255, 0.15);
+      --color-accent-border:   rgba(0, 194, 255, 0.22);
+      --color-live:            #ff3b3b;
+      --color-score-flash:     #ffe066;
+      --color-text-primary:    #ffffff;
+      --color-text-secondary:  rgba(255, 255, 255, 0.55);
+      --color-divider:         rgba(255, 255, 255, 0.09);
+      --color-error:           rgba(255, 71, 87, 0.85);
+      --color-error-bg:        rgba(255, 71, 87, 0.12);
+      --color-error-border:    rgba(255, 71, 87, 0.35);
+
+      --font-ui:   'Arial', 'Helvetica Neue', sans-serif;
+      --font-mono: 'Courier New', 'Lucida Console', monospace;
+
+      --radius:           8px;
+      --radius-sm:        4px;
+      --shadow-panel:     0 12px 48px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.05);
+      --shadow-goal:      0 10px 40px rgba(0, 0, 0, 0.70), 0 0 0 1px rgba(255, 255, 255, 0.07);
+      --transition:       0.32s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    /* ─── RESET & BASE ──────────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      background: transparent;
+      font-family: var(--font-ui);
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+
+    /* ─── LIVE BADGE ────────────────────────────────────────────────────────── */
+    #live-badge {
+      position: absolute;
+      top: 44px;
+      left: 60px;
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      background: var(--color-bg-panel);
+      border: 1px solid rgba(255, 59, 59, 0.30);
+      border-radius: var(--radius-sm);
+      padding: 7px 16px 7px 12px;
+      opacity: 0;
+      transform: translateY(-6px);
+      transition: opacity var(--transition), transform var(--transition);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.45);
+    }
+
+    #live-badge.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .live-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--color-live);
+      flex-shrink: 0;
+      animation: blink 1.6s ease-in-out infinite;
+    }
+
+    .live-text {
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 3px;
+      color: var(--color-live);
+      text-transform: uppercase;
+    }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.25; }
+    }
+
+    /* ─── UPDATED TIME ──────────────────────────────────────────────────────── */
+    #updated-time {
+      position: absolute;
+      top: 52px;
+      right: 60px;
+      font-size: 12px;
+      color: var(--color-text-secondary);
+      letter-spacing: 0.4px;
+      opacity: 0;
+      transition: opacity var(--transition);
+    }
+
+    #updated-time.visible { opacity: 1; }
+
+    /* ─── ERROR INDICATOR ───────────────────────────────────────────────────── */
+    #error-indicator {
+      position: absolute;
+      top: 44px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--color-error-bg);
+      border: 1px solid var(--color-error-border);
+      border-radius: var(--radius-sm);
+      padding: 7px 20px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.4px;
+      color: var(--color-error);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity var(--transition);
+    }
+
+    #error-indicator.visible { opacity: 1; }
+
+    /* ─── SCOREBOARD ────────────────────────────────────────────────────────── */
+    #scoreboard {
+      position: absolute;
+      bottom: 86px;
+      left: 50%;
+      transform: translateX(-50%) translateY(14px);
+      width: 860px;
+      height: 74px;
+      display: flex;
+      align-items: stretch;
+      border-radius: var(--radius);
+      overflow: hidden;
+      opacity: 0;
+      transition: opacity var(--transition), transform var(--transition);
+      box-shadow: var(--shadow-panel);
+    }
+
+    #scoreboard::before {
+      content: '';
+      position: absolute;
+      inset: 0 0 auto 0;
+      height: 2px;
+      background: linear-gradient(90deg,
+        transparent 0%,
+        var(--color-accent) 30%,
+        var(--color-accent) 70%,
+        transparent 100%
+      );
+      opacity: 0.7;
+      z-index: 1;
+    }
+
+    #scoreboard.visible {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    /* Home / Away panels */
+    .team-panel {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      background: var(--color-bg-panel);
+      padding: 0 22px;
+      gap: 16px;
+    }
+
+    .team-panel.home {
+      justify-content: flex-end;
+      border-right: 1px solid var(--color-divider);
+    }
+
+    .team-panel.away {
+      flex-direction: row-reverse;
+      justify-content: flex-end;
+      border-left: 1px solid var(--color-divider);
+    }
+
+    .team-name {
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      color: var(--color-text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 260px;
+    }
+
+    .team-score {
+      font-size: 38px;
+      font-weight: 900;
+      color: var(--color-text-primary);
+      min-width: 46px;
+      text-align: center;
+      line-height: 1;
+      font-feature-settings: 'tnum';
+    }
+
+    .team-score.flash {
+      animation: score-flash 0.65s ease-out forwards;
+    }
+
+    @keyframes score-flash {
+      0%   { color: var(--color-score-flash); transform: scale(1.30); }
+      50%  { color: var(--color-score-flash); transform: scale(1.12); }
+      100% { color: var(--color-text-primary); transform: scale(1); }
+    }
+
+    /* Center clock block */
+    #clock-block {
+      width: 136px;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(180deg, var(--color-accent-dim) 0%, rgba(0,194,255,0.04) 100%);
+      border-left: 1px solid var(--color-accent-border);
+      border-right: 1px solid var(--color-accent-border);
+      gap: 3px;
+    }
+
+    #game-clock {
+      font-size: 26px;
+      font-weight: 800;
+      font-family: var(--font-mono);
+      letter-spacing: 3px;
+      color: var(--color-accent);
+      line-height: 1;
+    }
+
+    #clock-label {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 2.5px;
+      text-transform: uppercase;
+      color: var(--color-text-secondary);
+    }
+
+    /* ─── GOAL NOTIFICATION ─────────────────────────────────────────────────── */
+    #goal-notification {
+      position: absolute;
+      bottom: 174px;
+      left: 50%;
+      transform: translateX(-50%) translateY(18px);
+      width: 580px;
+      background: var(--color-bg-panel-alt);
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      border-top: 2px solid var(--color-accent);
+      border-radius: var(--radius);
+      padding: 14px 22px 14px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.42s ease, transform 0.42s ease;
+      box-shadow: var(--shadow-goal);
+    }
+
+    #goal-notification.visible {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    .goal-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .goal-label {
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: var(--color-accent);
+    }
+
+    #goal-team-name {
+      margin-left: auto;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--color-text-secondary);
+    }
+
+    #goal-scorer {
+      font-size: 20px;
+      font-weight: 800;
+      color: var(--color-text-primary);
+      letter-spacing: 0.2px;
+    }
+
+    #goal-assist {
+      font-size: 12px;
+      color: var(--color-text-secondary);
+      letter-spacing: 0.3px;
+      min-height: 16px;
+    }
+
+    #goal-clock {
+      font-size: 11px;
+      color: var(--color-text-secondary);
+      font-family: var(--font-mono);
+      min-height: 14px;
+    }
+
+    .goal-divider {
+      width: 100%;
+      height: 1px;
+      background: var(--color-divider);
+      margin: 2px 0;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="live-badge">
+    <span class="live-dot"></span>
+    <span class="live-text">Live</span>
+  </div>
+
+  <div id="updated-time"></div>
+
+  <div id="error-indicator">Connection error — retrying&hellip;</div>
+
+  <div id="scoreboard">
+    <div class="team-panel home">
+      <span class="team-name" id="home-name">—</span>
+      <span class="team-score" id="home-score">0</span>
+    </div>
+    <div id="clock-block">
+      <span id="game-clock">00:00</span>
+      <span id="clock-label">Clock</span>
+    </div>
+    <div class="team-panel away">
+      <span class="team-score" id="away-score">0</span>
+      <span class="team-name" id="away-name">—</span>
+    </div>
+  </div>
+
+  <div id="goal-notification">
+    <div class="goal-header">
+      <span class="goal-label">Goal</span>
+      <span id="goal-team-name"></span>
+    </div>
+    <div class="goal-divider"></div>
+    <div id="goal-scorer"></div>
+    <div id="goal-assist"></div>
+    <div id="goal-clock"></div>
+  </div>
+
+  <script>
+    'use strict';
+
+    // ─── CONFIG ──────────────────────────────────────────────────────────────
+    const API_URL          = 'https://pointtracker-service-ultimate.onrender.com/live';
+    const POLL_MS          = 5000;
+    const GOAL_DISPLAY_MS  = 14000;
+
+    // ─── STATE ───────────────────────────────────────────────────────────────
+    let prev         = null;
+    let firstRender  = true;
+    let goalTimer    = null;
+
+    // ─── DOM REFS ─────────────────────────────────────────────────────────────
+    const el = {
+      liveBadge:   document.getElementById('live-badge'),
+      updatedTime: document.getElementById('updated-time'),
+      errorInd:    document.getElementById('error-indicator'),
+      scoreboard:  document.getElementById('scoreboard'),
+      homeName:    document.getElementById('home-name'),
+      awayName:    document.getElementById('away-name'),
+      homeScore:   document.getElementById('home-score'),
+      awayScore:   document.getElementById('away-score'),
+      gameClock:   document.getElementById('game-clock'),
+      goalNotif:   document.getElementById('goal-notification'),
+      goalTeam:    document.getElementById('goal-team-name'),
+      goalScorer:  document.getElementById('goal-scorer'),
+      goalAssist:  document.getElementById('goal-assist'),
+      goalClock:   document.getElementById('goal-clock'),
+    };
+
+    // ─── UTILS ───────────────────────────────────────────────────────────────
+
+    function show(elem, visible) {
+      elem.classList.toggle('visible', Boolean(visible));
+    }
+
+    function formatClock(seconds) {
+      if (seconds == null || !isFinite(seconds)) return '—:——';
+      const s  = Math.max(0, Math.floor(seconds));
+      const mm = String(Math.floor(s / 60)).padStart(2, '0');
+      const ss = String(s % 60).padStart(2, '0');
+      return `${mm}:${ss}`;
+    }
+
+    function formatUpdatedAt(iso) {
+      if (!iso) return '';
+      try {
+        return `Updated ${new Date(iso).toLocaleTimeString([], {
+          hour: '2-digit', minute: '2-digit', second: '2-digit',
+        })}`;
+      } catch (_) {
+        return '';
+      }
+    }
+
+    function resolveTeamLabel(side, data) {
+      if (!side) return '';
+      if (side === 'home') return data.homeTeamName || 'Home';
+      if (side === 'away') return data.awayTeamName || 'Away';
+      return side;
+    }
+
+    function flashScore(elem) {
+      elem.classList.remove('flash');
+      void elem.offsetWidth; // force reflow so animation restarts
+      elem.classList.add('flash');
+    }
+
+    function goalKey(ls) {
+      if (!ls) return null;
+      return `${ls.team}|${ls.scorer}|${ls.assist}`;
+    }
+
+    // ─── GOAL PANEL ──────────────────────────────────────────────────────────
+
+    function showGoalPanel(ls, data) {
+      if (goalTimer) { clearTimeout(goalTimer); goalTimer = null; }
+
+      el.goalTeam.textContent   = resolveTeamLabel(ls.team, data).toUpperCase();
+      el.goalScorer.textContent = ls.scorer || '';
+      el.goalAssist.textContent = ls.assist ? `Assist: ${ls.assist}` : '';
+      el.goalClock.textContent  = ls.gameClockSeconds != null
+        ? `at ${formatClock(ls.gameClockSeconds)}`
+        : '';
+
+      // Dismiss then re-show to replay entry animation even if already visible
+      show(el.goalNotif, false);
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        show(el.goalNotif, true);
+        goalTimer = setTimeout(() => show(el.goalNotif, false), GOAL_DISPLAY_MS);
+      }));
+    }
+
+    // ─── RENDER ──────────────────────────────────────────────────────────────
+
+    function render(data) {
+      // Names
+      el.homeName.textContent = data.homeTeamName || '—';
+      el.awayName.textContent = data.awayTeamName || '—';
+
+      // Scores with flash on change
+      const homeScore = data.homeScore ?? 0;
+      const awayScore = data.awayScore ?? 0;
+
+      if (!firstRender && prev) {
+        if (homeScore !== (prev.homeScore ?? 0)) flashScore(el.homeScore);
+        if (awayScore !== (prev.awayScore ?? 0)) flashScore(el.awayScore);
+      }
+
+      el.homeScore.textContent = homeScore;
+      el.awayScore.textContent = awayScore;
+
+      // Clock
+      el.gameClock.textContent = formatClock(data.gameClockSeconds);
+
+      // Updated time
+      el.updatedTime.textContent = formatUpdatedAt(data.updatedAt);
+
+      // Goal notification
+      const ls    = data.lastScore;
+      const prevLs = prev?.lastScore;
+
+      if (ls && ls.scorer) {
+        if (firstRender) {
+          // Populate silently on first load; show without animation trigger
+          el.goalTeam.textContent   = resolveTeamLabel(ls.team, data).toUpperCase();
+          el.goalScorer.textContent = ls.scorer || '';
+          el.goalAssist.textContent = ls.assist ? `Assist: ${ls.assist}` : '';
+          el.goalClock.textContent  = ls.gameClockSeconds != null
+            ? `at ${formatClock(ls.gameClockSeconds)}`
+            : '';
+          show(el.goalNotif, true);
+          goalTimer = setTimeout(() => show(el.goalNotif, false), GOAL_DISPLAY_MS);
+        } else if (goalKey(ls) !== goalKey(prevLs)) {
+          showGoalPanel(ls, data);
+        }
+      }
+
+      // Show persistent panels
+      show(el.scoreboard, true);
+      show(el.liveBadge, true);
+      show(el.updatedTime, true);
+      show(el.errorInd, false);
+
+      prev        = data;
+      firstRender = false;
+    }
+
+    // ─── FETCH ───────────────────────────────────────────────────────────────
+
+    async function poll() {
+      try {
+        const res = await fetch(API_URL, { cache: 'no-store' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        render(data);
+      } catch (err) {
+        console.warn('[overlay] fetch error:', err.message);
+        show(el.errorInd, true);
+        // Preserve whatever is already rendered
+      }
+    }
+
+    // ─── BOOT ────────────────────────────────────────────────────────────────
+    poll();
+    setInterval(poll, POLL_MS);
+  </script>
+</body>
+</html>
