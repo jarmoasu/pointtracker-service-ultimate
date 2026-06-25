@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: pointtracker-service
+    runtime: node
+    region: frankfurt
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: CLAIM_CODE
+        sync: false
+      - key: SESSION_SECRET_HEX
+        generateValue: true
+      - key: STREAM_ID
+        value: main
+      - key: NODE_ENV
+        value: production
