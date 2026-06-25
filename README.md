@@ -1,132 +1,185 @@
-PointTracker Service – Ultimate
+# PointTracker Service – Ultimate
 
-Backend service for real-time score tracking in Ultimate (Frisbee).
+Backend service for real-time score tracking in Ultimate Frisbee.
 
-IMPORTANT: Vibe-Coded Project This project has been vibe-coded using
-ChatGPT 5.2. The implementation is iterative and AI-assisted. Code
-prioritizes rapid development over architectural perfection.
-It should be treated as a solid MVP foundation.
+> **Note:** This project was built with iterative AI assistance. Code prioritises rapid development over architectural perfection and should be treated as a solid MVP foundation.
 
-------------------------------------------------------------------------
+---
 
-PURPOSE
+## Purpose
 
-The system provides: - A secure write interface for a single active
-scorekeeper device - A public read-only live endpoint for stream
-overlays - A minimal admin control panel
+- Secure write interface for a single active scorekeeper device
+- Public read-only live endpoint for stream overlays (OBS, etc.)
+- Minimal admin control panel
 
-------------------------------------------------------------------------
+---
 
-ARCHITECTURE
+## Architecture
 
-Runtime: Node.js (v20) Framework: Fastify Database: SQLite (via
-better-sqlite3) ORM: Prisma Hosting: Render
+| Layer | Choice |
+|---|---|
+| Runtime | Node.js ≥ 20 |
+| Framework | Fastify |
+| Database | PostgreSQL via Prisma (local: Prisma Postgres dev server) |
+| ORM | Prisma |
+| Hosting | Render |
 
-Authentication: - Writer: Bearer token (claim-based) - Admin:
-secure-session cookie
+**Authentication:**
+- Writer: Bearer token (claim-based, latest claim wins)
+- Admin: Secure session cookie (`@fastify/secure-session`)
 
-Single persistent stream channel (STREAM_ID). Latest claim always wins.
+A single persistent stream channel is identified by `STREAM_ID`.
 
-------------------------------------------------------------------------
+---
 
-PUBLIC ENDPOINTS
+## API Reference
 
-GET /health Returns: { “ok”: true }
+### Public endpoints
 
-GET /ready Returns: { “ready”: true }
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/health` | Returns `{ "ok": true }` |
+| `GET` | `/ready` | DB connectivity check — returns `{ "ready": true }` |
+| `GET` | `/live` | Live feed for overlays: teams, scores, clock, last goal |
 
-GET /live Public live feed for overlays. Returns current teams, score,
-clock, and last goal.
+**`GET /live` response:**
+```json
+{
+  "homeTeamName": "Team A",
+  "awayTeamName": "Team B",
+  "homeScore": 5,
+  "awayScore": 3,
+  "gameClockSeconds": 610,
+  "lastScore": {
+    "team": "home",
+    "scorer": "12",
+    "assist": "7",
+    "gameClockSeconds": 605
+  },
+  "updatedAt": "2025-06-25T12:00:00.000Z"
+}
+```
 
-------------------------------------------------------------------------
+---
 
-WRITER ENDPOINTS (Bearer token required)
+### Writer endpoints (Bearer token required)
 
-POST /claim Request: { “claimCode”: “a1b2c3d4”, “deviceName”:
-“scorekeeper-iphone” }
+Obtain a write token by claiming with the claim code:
 
-Response: { “writeToken”: “” }
+```
+POST /claim
+{ "claimCode": "a1b2c3d4", "deviceName": "scorekeeper-iphone" }
+→ { "writeToken": "<64-char hex token>" }
+```
 
-PUT /teams { “homeTeamName”: “Team A”, “awayTeamName”: “Team B” }
+Then pass it as `Authorization: Bearer <writeToken>` on all writer requests.
 
-PUT /clock { “gameClockSeconds”: 615 }
+| Method | Path | Body | Description |
+|---|---|---|---|
+| `PUT` | `/teams` | `{ "homeTeamName": "...", "awayTeamName": "..." }` | Set team names (resets scores if names change) |
+| `PUT` | `/clock` | `{ "gameClockSeconds": 615 }` | Update game clock |
+| `POST` | `/score` | `{ "team": "home"\|"away", "gameClockSeconds": 610, "scorer": "12", "assist": "7", "requestId": "goal-001" }` | Record a goal (idempotent via `requestId`) |
+| `POST` | `/update_result` | All fields optional — see below | Bulk update state |
 
-POST /score { “team”: “home”, “gameClockSeconds”: 610, “scorer”: “12”,
-“assist”: “7”, “requestId”: “goal-001” }
+**`POST /update_result` body** (all fields optional):
+```json
+{
+  "homeTeamName": "Team A",
+  "awayTeamName": "Team B",
+  "homeScore": 12,
+  "awayScore": 7,
+  "lastScore": "home",
+  "lastScorer": "PlayerName",
+  "lastAssist": "PlayerName"
+}
+```
+`lastScore` accepts `"home"`, `"away"`, or either team name string.
 
-Idempotent via requestId.
+---
 
-POST /update_result { “homeTeamName”: “Team A”, “awayTeamName”: “Team B”,
-“HomeScore”: “12”, “awayScore”: “7”, “lastScore”: “teamName”,
-“lastScorer”: “PlayerName”, “lastAssist”: “PlayerName” }
+### Admin endpoints (Session cookie required)
 
-------------------------------------------------------------------------
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `POST` | `/admin/login` | — | `{ "password": "..." }` → sets session cookie |
+| `POST` | `/admin/logout` | Session | Clears session |
+| `GET` | `/admin/state` | Public (rate limited) | Full stream + auth state |
+| `GET` | `/admin/claim-code` | Session | Returns current claim code |
+| `POST` | `/admin/set-claim` | Session | `{ "claimCode": "a1b2c3d4" }` (8 hex chars) |
+| `POST` | `/admin/rotate-claim` | Session | Generates and returns a new random claim code |
+| `POST` | `/admin/reset` | Session | Resets stream state and clears active writer |
 
-ADMIN ENDPOINTS (Session-based)
+---
 
-POST /admin/login { “password”: “” }
+## Admin UI
 
-GET /admin/state (public, rate limited)
+Navigate to `/admin` in a browser. Features: login, view state, update teams, add goals, rotate claim code, reset game.
 
-GET /admin/claim-code (session required)
+---
 
-POST /admin/set-claim { "claimCode": "a1b2c3d4" } (session required, 8 hex chars)
+## Security
 
-POST /admin/rotate-claim Returns new claim code.
+- Argon2id hashing for all secrets (admin password, claim code, write tokens)
+- `@fastify/secure-session` signed cookies (HTTPS only, `httpOnly`, `SameSite: lax`)
+- Rate limiting on all sensitive endpoints
+- CORS allowlist — blocks browser origins unless `CORS_ORIGINS` is set
+- Idempotent scoring via `requestId`
 
-POST /admin/reset Resets stream state and clears writer.
+---
 
-------------------------------------------------------------------------
+## Environment Variables
 
-ADMIN UI
+Copy `.env.example` to `.env` and fill in values:
 
-Accessible at: admin.html
+| Variable | Required | Description |
+|---|---|---|
+| `DATABASE_URL` | Yes | Prisma Postgres or standard PostgreSQL URL |
+| `ADMIN_PASSWORD` | Yes | Admin panel password (hashed on first boot) |
+| `CLAIM_CODE` | Yes | Code scorekeeper devices use to claim a write token |
+| `SESSION_SECRET_HEX` | Yes | 64-char hex string for signing session cookies |
+| `STREAM_ID` | No | Logical stream name (default: `main`) |
+| `PORT` | No | Port to listen on (Render sets this automatically) |
+| `CORS_ORIGINS` | No | Comma-separated allowed origins, e.g. `https://yourdomain.com` |
 
-Features: - Login - View state - Update teams - Add goal - Rotate
-claim - Reset game
+Generate a session secret:
+```bash
+openssl rand -hex 32
+```
 
-------------------------------------------------------------------------
+---
 
-SECURITY
+## Local Development
 
--   Bearer token writer auth
--   Secure-session admin auth
--   Argon2 hashing
--   Rate limiting
--   Optional CORS restriction
--   Idempotent scoring
+```bash
+npm install
 
-------------------------------------------------------------------------
+# Start local Prisma Postgres dev server (generates DATABASE_URL)
+npx prisma dev
 
-ENVIRONMENT VARIABLES
+# Copy the generated DATABASE_URL into .env, then:
+npm start
+```
 
-DATABASE_URL=file:/var/sqlite/db.sqlite
-STREAM_ID=main
-ADMIN_PASSWORD=your-password
-SESSION_SECRET=<random string>
-CORS_ORIGINS=https://yourdomain.com
+---
 
-Generate session secret: openssl rand -hex 32
+## Deployment (Render)
 
-------------------------------------------------------------------------
+### Option 1 — One-click via blueprint
 
-DEPLOYMENT (Render)
+The repo includes a [`render.yaml`](render.yaml) blueprint. Fork this repo, connect it to Render, and Render will configure the service automatically. You must supply `DATABASE_URL`, `ADMIN_PASSWORD`, and `CLAIM_CODE` in the Render dashboard; `SESSION_SECRET_HEX` is auto-generated.
 
-1. Create a Web Service pointing to this repo.
-2. Set Build Command:  npm install
-   Set Start Command:  npm start
-3. Add a Persistent Disk with mount path /var/sqlite (any size, 1 GB is
-   plenty for this workload).
-4. Set the environment variables listed above. DATABASE_URL must point
-   to the persistent disk: file:/var/sqlite/db.sqlite
-5. Deploy. On first boot, Prisma creates the SQLite file and runs the
-   migration automatically. Subsequent deploys leave existing data intact.
+### Option 2 — Manual
 
-------------------------------------------------------------------------
+1. Create a **Web Service** pointing to this repo.
+2. Set **Build Command:** `npm install && npm run build`
+3. Set **Start Command:** `npm start`
+4. Add environment variables from the table above.
+5. Deploy. On first boot, Prisma runs migrations and seeds initial state.
 
-FUTURE IMPROVEMENTS
+---
 
--   WebSocket live push
--   Event feed history
--   Timeout & halftime endpoints
+## Future Improvements
 
+- WebSocket live push
+- Event feed / goal history
+- Timeout & halftime endpoints
