@@ -139,7 +139,7 @@ Copy `.env.example` to `.env` and fill in values:
 | `SESSION_SECRET_HEX` | Yes | 64-char hex string for signing session cookies |
 | `STREAM_ID` | No | Logical stream name (default: `main`) |
 | `PORT` | No | Port to listen on (Render sets this automatically) |
-| `CORS_ORIGINS` | No | Comma-separated allowed origins, e.g. `https://yourdomain.com` |
+| `CORS_ORIGINS` | No | Comma-separated allowed origins to restrict to, e.g. `https://yourdomain.com`. If unset, all origins are allowed (safe — write/admin endpoints are protected by tokens and session cookies). |
 
 Generate a session secret:
 ```bash

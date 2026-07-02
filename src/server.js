@@ -37,10 +37,13 @@ async function start() {
         // No Origin header (curl/native/server-to-server) => allow
         if (!origin) return cb(null, true);
 
-        // If no allowlist configured => block browser origins (safer default)
-        if (allowedOrigins.length === 0) return cb(new Error('Not allowed by CORS'), false);
+        // No allowlist configured => allow all origins.
+        // Public endpoints (/live, /health, /ready) are read-only and intentionally open.
+        // Write and admin endpoints are protected by Bearer tokens and session cookies,
+        // so CORS is not the security boundary for those.
+        if (allowedOrigins.length === 0) return cb(null, true);
 
-        // Allow if configured
+        // Allowlist configured => restrict to listed origins only
         if (allowedOrigins.includes(origin)) return cb(null, true);
 
         return cb(new Error('Not allowed by CORS'), false);
