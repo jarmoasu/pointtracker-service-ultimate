@@ -18,6 +18,8 @@ model StreamState {
   homeScore            Int      @default(0)
   awayScore            Int      @default(0)
   gameClockSeconds     Int      @default(0)
+  clockRunning         Boolean  @default(false)
+  clockStartedAt       DateTime?
 
   lastScoreTeam        String?  // "home" | "away"
   lastScorer           String?

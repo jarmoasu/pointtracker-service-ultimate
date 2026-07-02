@@ -116,19 +116,35 @@ async function writerRoutes(fastify) {
       },
     },
   }, async (request, reply) => {
-    const { gameClockSeconds } = request.body || {};
+    const { gameClockSeconds, running } = request.body || {};
 
     if (typeof gameClockSeconds !== 'number' || gameClockSeconds < 0) {
       return reply.code(400).send({ error: 'valid gameClockSeconds required' });
     }
 
+    if (running !== undefined && typeof running !== 'boolean') {
+      return reply.code(400).send({ error: 'running must be a boolean' });
+    }
+
     const streamId = process.env.STREAM_ID || 'main';
+
+    const updateData = {
+      gameClockSeconds: Math.floor(gameClockSeconds),
+    };
+
+    // `running` marks whether the game clock is live-ticking. The clock only
+    // starts once (game start) and stops once (game end), so `clockStartedAt`
+    // is simply the server timestamp of the most recent start — clients
+    // interpolate elapsed time from it while running, and freeze on
+    // `gameClockSeconds` once stopped.
+    if (running !== undefined) {
+      updateData.clockRunning = running;
+      updateData.clockStartedAt = running ? new Date() : null;
+    }
 
     await prisma.streamState.update({
       where: { streamId },
-      data: {
-        gameClockSeconds: Math.floor(gameClockSeconds),
-      },
+      data: updateData,
     });
 
     return { ok: true };

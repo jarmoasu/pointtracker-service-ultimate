@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Scoreboard</title>
+  <style>
+    /* ─── CSS VARIABLES — edit here to retheme ─────────────────────────────── */
+    :root {
+      --color-bg:              #05060a;
+      --color-panel-home:      rgba(0, 194, 255, 0.08);
+      --color-panel-away:      rgba(255, 71, 87, 0.08);
+      --color-accent:          #00c2ff;
+      --color-accent-away:     #ff4757;
+      --color-score-flash:     #ffe066;
+      --color-text-primary:    #ffffff;
+      --color-text-secondary:  rgba(255, 255, 255, 0.55);
+      --color-divider:         rgba(255, 255, 255, 0.12);
+      --color-error:           rgba(255, 71, 87, 0.9);
+      --color-error-bg:        rgba(255, 71, 87, 0.14);
+      --color-error-border:    rgba(255, 71, 87, 0.4);
+
+      --font-ui:   'Arial', 'Helvetica Neue', sans-serif;
+      --font-mono: 'Courier New', 'Lucida Console', monospace;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: var(--color-bg);
+      font-family: var(--font-ui);
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+
+    #root {
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ─── STATUS STRIP ──────────────────────────────────────────────────────── */
+    /* Reserves its own row so an error never overlaps the clock/scores below. */
+    #status-strip {
+      flex: 0 0 auto;
+      height: clamp(20px, 3vh, 32px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* ─── CLOCK ─────────────────────────────────────────────────────────────── */
+    #clock-row {
+      flex: 0 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: clamp(16px, 3vh, 40px) 0 clamp(8px, 2vh, 20px);
+    }
+
+    #clock {
+      font-family: var(--font-mono);
+      font-weight: 700;
+      font-size: clamp(48px, 9vw, 160px);
+      color: var(--color-text-primary);
+      letter-spacing: 0.02em;
+      font-feature-settings: 'tnum';
+      line-height: 1;
+    }
+
+    #clock.running::before {
+      content: '';
+      display: inline-block;
+      width: 0.5em;
+      height: 0.5em;
+      border-radius: 50%;
+      background: #2ed573;
+      margin-right: 0.35em;
+      vertical-align: middle;
+      animation: pulse 1.6s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%      { opacity: 0.25; }
+    }
+
+    /* ─── SCORES ────────────────────────────────────────────────────────────── */
+    #score-row {
+      flex: 1 1 auto;
+      display: flex;
+      min-height: 0;
+    }
+
+    .team-panel {
+      flex: 1 1 50%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-width: 0;
+      padding: 0 clamp(12px, 3vw, 48px);
+    }
+
+    .team-panel.home { background: var(--color-panel-home); }
+    .team-panel.away { background: var(--color-panel-away); }
+
+    .team-name {
+      font-size: clamp(16px, 3vw, 48px);
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--color-text-secondary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 100%;
+      margin-bottom: clamp(4px, 1.5vh, 24px);
+    }
+
+    .team-score {
+      font-size: clamp(120px, 26vw, 480px);
+      font-weight: 900;
+      color: var(--color-text-primary);
+      line-height: 1;
+      font-feature-settings: 'tnum';
+    }
+
+    .team-score.flash {
+      animation: score-flash 0.9s ease-out forwards;
+    }
+
+    @keyframes score-flash {
+      0%   { color: var(--color-score-flash); transform: scale(1.18); }
+      50%  { color: var(--color-score-flash); transform: scale(1.06); }
+      100% { color: var(--color-text-primary); transform: scale(1); }
+    }
+
+    #divider {
+      flex: 0 0 auto;
+      width: 2px;
+      margin: clamp(24px, 6vh, 80px) 0;
+      background: var(--color-divider);
+    }
+
+    /* ─── STATUS ────────────────────────────────────────────────────────────── */
+    #footer {
+      flex: 0 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: clamp(8px, 1.5vh, 16px) 0;
+    }
+
+    #updated-time {
+      font-size: clamp(10px, 1.2vw, 16px);
+      color: var(--color-text-secondary);
+      letter-spacing: 0.4px;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+
+    #updated-time.visible { opacity: 1; }
+
+    #error-indicator {
+      background: var(--color-error-bg);
+      border: 1px solid var(--color-error-border);
+      border-radius: 6px;
+      padding: 4px 20px;
+      font-size: clamp(11px, 1.2vw, 16px);
+      font-weight: 600;
+      letter-spacing: 0.4px;
+      color: var(--color-error);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+    }
+
+    #error-indicator.visible { opacity: 1; }
+  </style>
+</head>
+<body>
+
+  <div id="root">
+    <div id="status-strip">
+      <div id="error-indicator">Connection error — retrying&hellip;</div>
+    </div>
+
+    <div id="clock-row">
+      <div id="clock">--:--</div>
+    </div>
+
+    <div id="score-row">
+      <div class="team-panel home">
+        <div class="team-name" id="home-name">—</div>
+        <div class="team-score" id="home-score">0</div>
+      </div>
+      <div id="divider"></div>
+      <div class="team-panel away">
+        <div class="team-name" id="away-name">—</div>
+        <div class="team-score" id="away-score">0</div>
+      </div>
+    </div>
+
+    <div id="footer">
+      <div id="updated-time"></div>
+    </div>
+  </div>
+
+  <script>
+    'use strict';
+
+    // ─── CONFIG ──────────────────────────────────────────────────────────────
+    const API_URL   = 'https://pointtracker-service-ultimate.onrender.com/live';
+    const POLL_MS    = 5000;
+    const TICK_MS    = 250;
+
+    // ─── STATE ───────────────────────────────────────────────────────────────
+    let latest        = null;  // last /live payload
+    let clockOffsetMs = 0;     // serverNow - Date.now(), refreshed every poll
+    let prevScores    = { home: null, away: null };
+    let firstRender   = true;
+    let wakeLock      = null;
+
+    // ─── DOM REFS ────────────────────────────────────────────────────────────
+    const el = {
+      errorInd:    document.getElementById('error-indicator'),
+      clock:       document.getElementById('clock'),
+      homeName:    document.getElementById('home-name'),
+      awayName:    document.getElementById('away-name'),
+      homeScore:   document.getElementById('home-score'),
+      awayScore:   document.getElementById('away-score'),
+      updatedTime: document.getElementById('updated-time'),
+    };
+
+    // ─── UTILS ───────────────────────────────────────────────────────────────
+
+    function show(elem, visible) {
+      elem.classList.toggle('visible', Boolean(visible));
+    }
+
+    function formatClock(totalSeconds) {
+      if (totalSeconds == null || !isFinite(totalSeconds)) return '--:--';
+      const s  = Math.max(0, Math.floor(totalSeconds));
+      const mm = String(Math.floor(s / 60)).padStart(2, '0');
+      const ss = String(s % 60).padStart(2, '0');
+      return `${mm}:${ss}`;
+    }
+
+    function formatUpdatedAt(iso) {
+      if (!iso) return '';
+      try {
+        return `Updated ${new Date(iso).toLocaleTimeString([], {
+          hour: '2-digit', minute: '2-digit', second: '2-digit',
+        })}`;
+      } catch (_) {
+        return '';
+      }
+    }
+
+    function flashScore(elem) {
+      elem.classList.remove('flash');
+      void elem.offsetWidth; // force reflow so animation restarts
+      elem.classList.add('flash');
+    }
+
+    // ─── CLOCK INTERPOLATION ─────────────────────────────────────────────────
+    // The server only tells us gameClockSeconds as of `updatedAt`, plus
+    // whether the clock is running and when it last started (clockStartedAt).
+    // The game clock starts once (game start) and stops once (game end) — no
+    // pausing in between — so while running we just add elapsed real time
+    // since clockStartedAt, corrected for client/server clock drift via the
+    // serverNow timestamp captured on the last poll.
+    function computeDisplaySeconds() {
+      if (!latest) return null;
+
+      if (!latest.clockRunning || !latest.clockStartedAt) {
+        return latest.gameClockSeconds;
+      }
+
+      const startedAtMs  = new Date(latest.clockStartedAt).getTime();
+      const nowServerMs  = Date.now() + clockOffsetMs;
+      const elapsedSince = Math.max(0, (nowServerMs - startedAtMs) / 1000);
+
+      return latest.gameClockSeconds + elapsedSince;
+    }
+
+    function tick() {
+      const seconds = computeDisplaySeconds();
+      el.clock.textContent = formatClock(seconds);
+      el.clock.classList.toggle('running', Boolean(latest && latest.clockRunning));
+    }
+
+    // ─── RENDER ──────────────────────────────────────────────────────────────
+
+    function render(data) {
+      el.homeName.textContent = data.homeTeamName || '—';
+      el.awayName.textContent = data.awayTeamName || '—';
+
+      const homeScore = data.homeScore ?? 0;
+      const awayScore = data.awayScore ?? 0;
+
+      if (!firstRender) {
+        if (homeScore !== prevScores.home) flashScore(el.homeScore);
+        if (awayScore !== prevScores.away) flashScore(el.awayScore);
+      }
+
+      el.homeScore.textContent = homeScore;
+      el.awayScore.textContent = awayScore;
+      prevScores = { home: homeScore, away: awayScore };
+
+      el.updatedTime.textContent = formatUpdatedAt(data.updatedAt);
+      show(el.updatedTime, true);
+      show(el.errorInd, false);
+
+      firstRender = false;
+    }
+
+    // ─── FETCH ───────────────────────────────────────────────────────────────
+
+    async function poll() {
+      try {
+        const res = await fetch(API_URL, { cache: 'no-store' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+
+        const serverNowMs = data.serverNow ? new Date(data.serverNow).getTime() : Date.now();
+        clockOffsetMs = serverNowMs - Date.now();
+        latest = data;
+
+        render(data);
+        tick();
+      } catch (err) {
+        console.warn('[scoreboard] fetch error:', err.message);
+        show(el.errorInd, true);
+        // Keep showing whatever was already rendered.
+      }
+    }
+
+    // ─── SCREEN WAKE LOCK ────────────────────────────────────────────────────
+    // Keeps the display from sleeping/dimming while the scoreboard is open.
+    // Requires HTTPS and a visible tab; unsupported browsers are a no-op.
+    async function requestWakeLock() {
+      if (!('wakeLock' in navigator)) return;
+      try {
+        wakeLock = await navigator.wakeLock.request('screen');
+        wakeLock.addEventListener('release', () => {
+          console.log('[scoreboard] wake lock released');
+        });
+        console.log('[scoreboard] wake lock acquired');
+      } catch (err) {
+        // Can fail if the tab isn't visible yet, battery saver is on, etc.
+        console.warn('[scoreboard] wake lock request failed:', err.message);
+      }
+    }
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        void requestWakeLock();
+      }
+    });
+
+    void requestWakeLock();
+
+    // ─── BOOT ────────────────────────────────────────────────────────────────
+    poll();
+    setInterval(poll, POLL_MS);
+    setInterval(tick, TICK_MS);
+  </script>
+</body>
+</html>

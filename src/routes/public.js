@@ -22,6 +22,8 @@ async function publicRoutes(fastify) {
         homeScore: true,
         awayScore: true,
         gameClockSeconds: true,
+        clockRunning: true,
+        clockStartedAt: true,
         lastScoreTeam: true,
         lastScorer: true,
         lastAssist: true,
@@ -32,6 +34,11 @@ async function publicRoutes(fastify) {
 
     reply.header('Cache-Control', 'no-store');
 
+    // Server clock timestamp on every response so clients (e.g. the
+    // scoreboard) can correct for their own clock drift when interpolating
+    // gameClockSeconds between polls.
+    const serverNow = new Date().toISOString();
+
     if (!state) {
       return {
         homeTeamName: '',
@@ -39,8 +46,11 @@ async function publicRoutes(fastify) {
         homeScore: 0,
         awayScore: 0,
         gameClockSeconds: 0,
+        clockRunning: false,
+        clockStartedAt: null,
         lastScore: null,
         updatedAt: new Date().toISOString(),
+        serverNow,
       };
     }
 
@@ -50,6 +60,8 @@ async function publicRoutes(fastify) {
       homeScore: state.homeScore,
       awayScore: state.awayScore,
       gameClockSeconds: state.gameClockSeconds,
+      clockRunning: state.clockRunning,
+      clockStartedAt: state.clockStartedAt,
       lastScore: state.lastScoreTeam
         ? {
             team: state.lastScoreTeam,
@@ -59,6 +71,7 @@ async function publicRoutes(fastify) {
           }
         : null,
       updatedAt: state.updatedAt,
+      serverNow,
     };
   });
 }
