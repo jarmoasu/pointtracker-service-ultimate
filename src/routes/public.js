@@ -10,9 +10,9 @@ async function publicRoutes(fastify) {
     return { ready: true };
   });
 
-  // Public live endpoint
-  fastify.get('/live', async (request, reply) => {
-    const streamId = process.env.STREAM_ID || 'main';
+  // Public live endpoint for a single court
+  fastify.get('/streams/:streamId/live', async (request, reply) => {
+    const { streamId } = request.params;
 
     const state = await prisma.streamState.findUnique({
       where: { streamId },
@@ -34,25 +34,16 @@ async function publicRoutes(fastify) {
 
     reply.header('Cache-Control', 'no-store');
 
+    // Courts are only created explicitly via the admin panel now, so an
+    // unknown streamId means a bad link/typo rather than "not started yet".
+    if (!state) {
+      return reply.code(404).send({ error: 'unknown stream' });
+    }
+
     // Server clock timestamp on every response so clients (e.g. the
     // scoreboard) can correct for their own clock drift when interpolating
     // gameClockSeconds between polls.
     const serverNow = new Date().toISOString();
-
-    if (!state) {
-      return {
-        homeTeamName: '',
-        awayTeamName: '',
-        homeScore: 0,
-        awayScore: 0,
-        gameClockSeconds: 0,
-        clockRunning: false,
-        clockStartedAt: null,
-        lastScore: null,
-        updatedAt: new Date().toISOString(),
-        serverNow,
-      };
-    }
 
     return {
       homeTeamName: state.homeTeamName,

@@ -13,6 +13,7 @@ datasource db {
 }
 model StreamState {
   streamId             String   @id
+  label                String   @default("")
   homeTeamName         String   @default("")
   awayTeamName         String   @default("")
   homeScore            Int      @default(0)
@@ -30,15 +31,23 @@ model StreamState {
   createdAt            DateTime @default(now())
 }
 
-model AuthState {
-  id                  Int      @id @default(1)
-  claimCodeHash       String
-  claimCodePlaintext  String?
+// One row per court/game. Replaces the old single AuthState singleton so
+// several games can be claimed/written independently on one backend.
+model StreamAuth {
+  streamId             String   @id
+  claimCodeHash        String
+  claimCodePlaintext   String?
   activeWriteTokenHash String?
-  activeWriterName    String?
-  claimedAt           DateTime?
-  lastRequestId       String?
+  activeWriterName     String?
+  claimedAt            DateTime?
+  lastRequestId        String?
 
+  updatedAt            DateTime @updatedAt
+  createdAt            DateTime @default(now())
+}
+
+model AdminAuth {
+  id                  Int      @id @default(1)
   adminPasswordHash   String
   updatedAt           DateTime @updatedAt
   createdAt           DateTime @default(now())

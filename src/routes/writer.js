@@ -14,7 +14,9 @@ async function writerRoutes(fastify) {
   // Parse JSON bodies
   // (Fastify parses JSON by default when content-type is application/json)
 
-  // 1) Claim: claimCode -> writeToken (rate limited)
+  // 1) Claim: claimCode -> writeToken + streamId (rate limited)
+  // Not scoped under /streams/:streamId because the client doesn't know
+  // which court it's claiming until the claim code resolves one.
   fastify.post('/claim', {
     config: {
       rateLimit: {
@@ -31,23 +33,22 @@ async function writerRoutes(fastify) {
       return reply.code(400).send({ error: 'claimCode required' });
     }
 
-    const auth = await prisma.authState.findUnique({ where: { id: 1 } });
+    // Claim codes are looked up by their stored plaintext (already how the
+    // admin claim-code display works) since each court's code must be
+    // resolvable without knowing the streamId up front.
+    const auth = await prisma.streamAuth.findFirst({
+      where: { claimCodePlaintext: claimCode },
+    });
     if (!auth) {
-      // This should not happen if Sprint 5 init ran
-      return reply.code(500).send({ error: 'auth state missing' });
-    }
-
-    const ok = await argon2.verify(auth.claimCodeHash, claimCode);
-    if (!ok) {
       return reply.code(401).send({ error: 'invalid claim code' });
     }
 
-    // latest claim wins: overwrite active write token
+    // latest claim wins: overwrite this court's active write token
     const writeToken = randomToken();
     const writeTokenHash = await argon2.hash(writeToken);
 
-    await prisma.authState.update({
-      where: { id: 1 },
+    await prisma.streamAuth.update({
+      where: { streamId: auth.streamId },
       data: {
         activeWriteTokenHash: writeTokenHash,
         activeWriterName: deviceName || null,
@@ -55,16 +56,16 @@ async function writerRoutes(fastify) {
       },
     });
 
-    return { writeToken };
+    return { writeToken, streamId: auth.streamId };
   });
 
   // 2) Writer test endpoint (protected)
-  fastify.get('/writer-test', { preHandler: requireWriter }, async (request) => {
+  fastify.get('/streams/:streamId/writer-test', { preHandler: requireWriter }, async (request) => {
     return { ok: true, writer: request.writer || null };
   });
 
   // Update team names (rate limited)
-  fastify.put('/teams', {
+  fastify.put('/streams/:streamId/teams', {
     preHandler: requireWriter,
     config: {
       rateLimit: {
@@ -79,7 +80,7 @@ async function writerRoutes(fastify) {
       return reply.code(400).send({ error: 'homeTeamName and awayTeamName required' });
     }
 
-    const streamId = process.env.STREAM_ID || 'main';
+    const { streamId } = request.params;
     const home = homeTeamName.trim();
     const away = awayTeamName.trim();
 
@@ -107,7 +108,7 @@ async function writerRoutes(fastify) {
   });
 
   // Update game clock (rate limited)
-  fastify.put('/clock', {
+  fastify.put('/streams/:streamId/clock', {
     preHandler: requireWriter,
     config: {
       rateLimit: {
@@ -126,7 +127,7 @@ async function writerRoutes(fastify) {
       return reply.code(400).send({ error: 'running must be a boolean' });
     }
 
-    const streamId = process.env.STREAM_ID || 'main';
+    const { streamId } = request.params;
 
     const updateData = {
       gameClockSeconds: Math.floor(gameClockSeconds),
@@ -151,7 +152,7 @@ async function writerRoutes(fastify) {
   });
 
   // Update result (rate limited)
-  // POST /update_result
+  // POST /streams/:streamId/update_result
   // Body:
   // {
   //   "homeTeamName": "Team A",
@@ -162,7 +163,7 @@ async function writerRoutes(fastify) {
   //   "lastScorer": "PlayerName",
   //   "lastAssist": "PlayerName"
   // }
-  fastify.post('/update_result', {
+  fastify.post('/streams/:streamId/update_result', {
     preHandler: requireWriter,
     config: {
       rateLimit: {
@@ -173,7 +174,7 @@ async function writerRoutes(fastify) {
   }, async (request, reply) => {
     const body = request.body || {};
 
-    const streamId = process.env.STREAM_ID || 'main';
+    const { streamId } = request.params;
 
     const updateData = {};
 
@@ -262,7 +263,7 @@ async function writerRoutes(fastify) {
   });
 
   // Record score (rate limited)
-  fastify.post('/score', {
+  fastify.post('/streams/:streamId/score', {
     preHandler: requireWriter,
     config: {
       rateLimit: {
@@ -285,10 +286,10 @@ async function writerRoutes(fastify) {
       return reply.code(400).send({ error: 'requestId required' });
     }
 
-    const streamId = process.env.STREAM_ID || 'main';
+    const { streamId } = request.params;
 
-    // Idempotency check
-    const auth = await prisma.authState.findUnique({ where: { id: 1 } });
+    // Idempotency check (scoped to this court's StreamAuth row)
+    const auth = await prisma.streamAuth.findUnique({ where: { streamId } });
     if (auth.lastRequestId === requestId) {
       return { ok: true, duplicate: true };
     }
@@ -312,8 +313,8 @@ async function writerRoutes(fastify) {
         where: { streamId },
         data: updateData,
       }),
-      prisma.authState.update({
-        where: { id: 1 },
+      prisma.streamAuth.update({
+        where: { streamId },
         data: { lastRequestId: requestId },
       }),
     ]);

@@ -275,7 +275,9 @@
     'use strict';
 
     // ─── CONFIG ──────────────────────────────────────────────────────────────
-    const API_URL          = 'https://pointtracker-service-ultimate.onrender.com/live';
+    const API_BASE         = 'https://pointtracker-service-ultimate.onrender.com';
+    const STREAM_ID        = new URLSearchParams(location.search).get('stream');
+    const API_URL          = STREAM_ID ? `${API_BASE}/streams/${encodeURIComponent(STREAM_ID)}/live` : null;
     const POLL_MS          = 5000;
     const GOAL_DISPLAY_MS  = 14000;
 
@@ -429,6 +431,7 @@
     // ─── FETCH ───────────────────────────────────────────────────────────────
 
     async function poll() {
+      if (!API_URL) return;
       try {
         const res = await fetch(API_URL, { cache: 'no-store' });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);

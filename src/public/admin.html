@@ -57,6 +57,49 @@
     .error {
       color: red;
     }
+
+    .stream-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin-bottom: 10px;
+      background: #fff;
+    }
+
+    .stream-row .info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .stream-row .streamId {
+      font-weight: 700;
+    }
+
+    .stream-row .meta {
+      color: #666;
+      font-size: 13px;
+      margin-top: 2px;
+    }
+
+    .stream-row .actions {
+      display: flex;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+
+    .links {
+      font-size: 13px;
+      margin-top: 8px;
+    }
+
+    .links a {
+      display: block;
+      word-break: break-all;
+    }
   </style>
 </head>
 <body>
@@ -71,8 +114,30 @@
   <div id="loginError" class="error"></div>
 </div>
 
-<!-- ADMIN PANEL -->
-<div id="adminPanel" class="hidden">
+<!-- COURT LIST -->
+<div id="listView" class="hidden">
+
+  <div class="card">
+    <h2>+ Uusi kenttä</h2>
+    <input id="newStreamIdInput" placeholder="esim. kentta-1" />
+    <input id="newLabelInput" placeholder="Nimi (valinnainen)" />
+    <button onclick="createStream()">Luo kenttä</button>
+    <div id="createResult"></div>
+  </div>
+
+  <div class="card">
+    <h2>Kentät</h2>
+    <button onclick="loadStreamList()">Päivitä</button>
+    <div id="streamListContainer" style="margin-top: 12px;"></div>
+  </div>
+
+  <button onclick="logout()">Logout</button>
+</div>
+
+<!-- COURT DETAIL -->
+<div id="detailView" class="hidden">
+  <button onclick="showListView()">&larr; Takaisin kenttiin</button>
+  <h2 id="detailTitle"></h2>
 
   <!-- STREAM STATE -->
   <div class="card">
@@ -175,7 +240,7 @@
 
   <!-- ROTATE CLAIM -->
   <div class="card">
-    <h2>Rotate Claim Code</h2>
+    <h2>Claim Code</h2>
     <button onclick="rotateClaim()">Generate New Claim Code</button>
     <br><br>
     <label>
@@ -184,19 +249,20 @@
     </label>
     <button onclick="setClaimCode()">Set Manually</button>
     <div id="claimResult">Current claim code: (not loaded)</div>
+    <div id="shareLinks" class="links"></div>
   </div>
 
-  <!-- RESET -->
+  <!-- RESET / DELETE -->
   <div class="card">
-    <h2>Reset Game</h2>
-    <button class="danger" onclick="resetGame()">Reset</button>
+    <h2>Danger zone</h2>
+    <button class="danger" onclick="resetGame()">Reset game</button>
+    <button class="danger" onclick="deleteCourt()">Delete court</button>
   </div>
-
-  <button onclick="logout()">Logout</button>
-
 </div>
 
 <script>
+
+let currentStreamId = null;
 
 async function readResponseBody(res) {
   const contentType = res.headers.get("content-type") || "";
@@ -244,9 +310,7 @@ async function login() {
   }
 
   document.getElementById("loginCard").classList.add("hidden");
-  document.getElementById("adminPanel").classList.remove("hidden");
-
-  loadState();
+  showListView();
 }
 
 async function logout() {
@@ -254,8 +318,133 @@ async function logout() {
   location.reload();
 }
 
+// ─── COURT LIST ────────────────────────────────────────────────────────────
+
+function showListView() {
+  currentStreamId = null;
+  document.getElementById("detailView").classList.add("hidden");
+  document.getElementById("listView").classList.remove("hidden");
+  loadStreamList();
+}
+
+function describeWriter(writer) {
+  if (!writer || !writer.hasActiveWriteToken) return "Ei claimattu";
+  const who = writer.activeWriterName || "(nimetön laite)";
+  const when = writer.claimedAt ? new Date(writer.claimedAt).toLocaleString() : "";
+  return "Claimattu: " + who + (when ? " (" + when + ")" : "");
+}
+
+function describeScore(state) {
+  if (!state) return "— ei tietoja —";
+  const home = state.homeTeamName || "Home";
+  const away = state.awayTeamName || "Away";
+  if (!state.homeTeamName && !state.awayTeamName) return "— ei vielä pelaajia —";
+  return home + " " + state.homeScore + " - " + state.awayScore + " " + away;
+}
+
+async function loadStreamList() {
+  const container = document.getElementById("streamListContainer");
+  const res = await fetch("/admin/streams", { credentials: "same-origin" });
+  if (!res.ok) {
+    const body = await readResponseBody(res);
+    container.innerText = "Kenttien lataus epäonnistui: " + res.status + (body && body.error ? " (" + body.error + ")" : "");
+    return;
+  }
+
+  const data = await res.json();
+  const streams = data.streams || [];
+
+  if (streams.length === 0) {
+    container.innerText = "Ei vielä yhtään kenttää.";
+    return;
+  }
+
+  container.innerHTML = "";
+  streams.forEach((s) => {
+    const row = document.createElement("div");
+    row.className = "stream-row";
+    row.innerHTML =
+      '<div class="info">' +
+        '<div class="streamId">' + s.streamId + (s.label && s.label !== s.streamId ? " — " + s.label : "") + '</div>' +
+        '<div class="meta">' + describeScore(s.state) + '</div>' +
+        '<div class="meta">' + describeWriter(s.writer) + '</div>' +
+      '</div>' +
+      '<div class="actions">' +
+        '<button onclick="manageStream(\'' + s.streamId + '\')">Hallitse</button>' +
+        '<button onclick="resetStreamFromList(\'' + s.streamId + '\')">Nollaa</button>' +
+        '<button class="danger" onclick="deleteStreamFromList(\'' + s.streamId + '\')">Poista</button>' +
+      '</div>';
+    container.appendChild(row);
+  });
+}
+
+async function createStream() {
+  const resultEl = document.getElementById("createResult");
+  const streamId = normalizeClaimCodeInputRaw(document.getElementById("newStreamIdInput").value);
+  const label = document.getElementById("newLabelInput").value.trim();
+
+  const res = await fetch("/admin/streams", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ streamId, label })
+  });
+
+  if (!res.ok) {
+    const body = await readResponseBody(res);
+    setResult(resultEl, false, "Kentän luonti epäonnistui: " + res.status + (body && body.error ? " (" + body.error + ")" : ""));
+    return;
+  }
+
+  const data = await res.json();
+  const scoreboardUrl = location.origin + "/scoreboard.html?stream=" + encodeURIComponent(data.streamId);
+  const overlayUrl = location.origin + "/overlay.html?stream=" + encodeURIComponent(data.streamId);
+  resultEl.innerHTML =
+    '<div class="success">Kenttä "' + data.streamId + '" luotu. Claim-koodi: <b>' + data.claimCode + '</b></div>' +
+    '<div class="links"><a href="' + scoreboardUrl + '" target="_blank">' + scoreboardUrl + '</a>' +
+    '<a href="' + overlayUrl + '" target="_blank">' + overlayUrl + '</a></div>';
+
+  document.getElementById("newStreamIdInput").value = "";
+  document.getElementById("newLabelInput").value = "";
+  loadStreamList();
+}
+
+function normalizeClaimCodeInputRaw(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+async function resetStreamFromList(streamId) {
+  if (!confirm('Nollataanko kenttä "' + streamId + '"?')) return;
+  await fetch("/admin/streams/" + encodeURIComponent(streamId) + "/reset", {
+    method: "POST",
+    credentials: "same-origin",
+  });
+  loadStreamList();
+}
+
+async function deleteStreamFromList(streamId) {
+  if (!confirm('Poistetaanko kenttä "' + streamId + '" pysyvästi?')) return;
+  await fetch("/admin/streams/" + encodeURIComponent(streamId), {
+    method: "DELETE",
+    credentials: "same-origin",
+  });
+  loadStreamList();
+}
+
+// ─── COURT DETAIL ──────────────────────────────────────────────────────────
+
+function manageStream(streamId) {
+  currentStreamId = streamId;
+  document.getElementById("listView").classList.add("hidden");
+  document.getElementById("detailView").classList.remove("hidden");
+  document.getElementById("detailTitle").innerText = "Kenttä: " + streamId;
+  loadState();
+}
+
 async function loadState() {
-  const res = await fetch("/admin/state", { credentials: "same-origin" });
+  if (!currentStreamId) return;
+
+  const res = await fetch("/admin/streams/" + encodeURIComponent(currentStreamId), { credentials: "same-origin" });
   if (!res.ok) {
     const body = await readResponseBody(res);
     document.getElementById("stateView").innerText =
@@ -284,6 +473,12 @@ async function loadState() {
     document.getElementById("lastAssistInput").value = data.state.lastAssist || "";
   }
 
+  const scoreboardUrl = location.origin + "/scoreboard.html?stream=" + encodeURIComponent(currentStreamId);
+  const overlayUrl = location.origin + "/overlay.html?stream=" + encodeURIComponent(currentStreamId);
+  document.getElementById("shareLinks").innerHTML =
+    '<a href="' + scoreboardUrl + '" target="_blank">' + scoreboardUrl + '</a>' +
+    '<a href="' + overlayUrl + '" target="_blank">' + overlayUrl + '</a>';
+
   await loadClaimCode();
 }
 
@@ -291,7 +486,7 @@ async function updateTeams() {
   const home = document.getElementById("homeTeamInput").value;
   const away = document.getElementById("awayTeamInput").value;
 
-  const res = await fetch("/teams", {
+  const res = await fetch("/streams/" + encodeURIComponent(currentStreamId) + "/teams", {
     method: "PUT",
     credentials: "same-origin",
     headers: { "Content-Type": "application/json" },
@@ -334,7 +529,7 @@ async function updateResult() {
     body.lastScore = lastScoreTeam;
   }
 
-  const res = await fetch("/update_result", {
+  const res = await fetch("/streams/" + encodeURIComponent(currentStreamId) + "/update_result", {
     method: "POST",
     credentials: "same-origin",
     headers: { "Content-Type": "application/json" },
@@ -363,7 +558,7 @@ async function addGoal() {
 
   const requestId = "admin-" + Date.now();
 
-  const res = await fetch("/score", {
+  const res = await fetch("/streams/" + encodeURIComponent(currentStreamId) + "/score", {
     method: "POST",
     credentials: "same-origin",
     headers: { "Content-Type": "application/json" },
@@ -388,7 +583,10 @@ async function addGoal() {
 }
 
 async function rotateClaim() {
-  const res = await fetch("/admin/rotate-claim", { method: "POST", credentials: "same-origin" });
+  const res = await fetch("/admin/streams/" + encodeURIComponent(currentStreamId) + "/rotate-claim", {
+    method: "POST",
+    credentials: "same-origin",
+  });
   const claimEl = document.getElementById("claimResult");
   if (!res.ok) {
     const body = await readResponseBody(res);
@@ -399,21 +597,35 @@ async function rotateClaim() {
   const data = await res.json();
   setResult(claimEl, true, "Current claim code: " + data.claimCode);
   document.getElementById("setClaimInput").value = data.claimCode || "";
-  await loadClaimCode();
 }
 
 async function resetGame() {
   if (!confirm("Are you sure you want to reset the game?")) return;
 
-  const res = await fetch("/admin/reset", { method: "POST" });
+  const res = await fetch("/admin/streams/" + encodeURIComponent(currentStreamId) + "/reset", {
+    method: "POST",
+    credentials: "same-origin",
+  });
   if (res.ok) {
     loadState();
   }
 }
 
+async function deleteCourt() {
+  if (!confirm('Poistetaanko kenttä "' + currentStreamId + '" pysyvästi?')) return;
+
+  const res = await fetch("/admin/streams/" + encodeURIComponent(currentStreamId), {
+    method: "DELETE",
+    credentials: "same-origin",
+  });
+  if (res.ok) {
+    showListView();
+  }
+}
+
 async function loadClaimCode() {
   const claimEl = document.getElementById("claimResult");
-  const res = await fetch("/admin/claim-code", { credentials: "same-origin" });
+  const res = await fetch("/admin/streams/" + encodeURIComponent(currentStreamId) + "/claim-code", { credentials: "same-origin" });
   if (!res.ok) {
     const body = await readResponseBody(res);
     setResult(claimEl, false, "Current claim code unavailable: " + res.status + (body && body.error ? " (" + body.error + ")" : ""));
@@ -435,7 +647,7 @@ async function setClaimCode() {
     return;
   }
 
-  const res = await fetch("/admin/set-claim", {
+  const res = await fetch("/admin/streams/" + encodeURIComponent(currentStreamId) + "/set-claim", {
     method: "POST",
     credentials: "same-origin",
     headers: { "Content-Type": "application/json" },

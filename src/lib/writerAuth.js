@@ -12,13 +12,28 @@ function getBearerToken(request) {
 
 /**
  * Writer auth rules (MVP):
+ * - Scoped to the court identified by the `streamId` route param.
  * - If admin session is present, allow write endpoints (admin can operate UI without a writer token).
- * - Otherwise require Authorization: Bearer <writeToken> and verify against AuthState.activeWriteTokenHash.
+ * - Otherwise require Authorization: Bearer <writeToken> and verify against that
+ *   court's StreamAuth.activeWriteTokenHash.
  */
 async function requireWriter(request, reply) {
   try {
+    const { streamId } = request.params || {};
+    if (!streamId) {
+      reply.code(400);
+      return reply.send({ error: 'streamId required' });
+    }
+
+    const auth = await prisma.streamAuth.findUnique({ where: { streamId } });
+    if (!auth) {
+      reply.code(404);
+      return reply.send({ error: 'unknown stream' });
+    }
+
     // Allow admin session to act as writer (for admin UI convenience)
     if (request.session && request.session.get('admin') === true) {
+      request.writer = { streamId, name: auth.activeWriterName || null, claimedAt: auth.claimedAt || null };
       return;
     }
 
@@ -28,9 +43,7 @@ async function requireWriter(request, reply) {
       return reply.send({ error: 'missing bearer token' });
     }
 
-    const auth = await prisma.authState.findUnique({ where: { id: 1 } });
-
-    if (!auth || !auth.activeWriteTokenHash) {
+    if (!auth.activeWriteTokenHash) {
       reply.code(401);
       return reply.send({ error: 'no active writer token set' });
     }
@@ -43,6 +56,7 @@ async function requireWriter(request, reply) {
 
     // Optional: attach writer info for handlers/logging
     request.writer = {
+      streamId,
       name: auth.activeWriterName || null,
       claimedAt: auth.claimedAt || null,
     };

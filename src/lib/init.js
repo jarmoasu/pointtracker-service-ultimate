@@ -16,12 +16,13 @@ async function ensureInitialized() {
   const adminPassword = requireEnv('ADMIN_PASSWORD');
   const claimCode = requireEnv('CLAIM_CODE');
 
-  // 1️⃣ Ensure StreamState exists
+  // 1️⃣ Ensure the default court's StreamState exists
   await prisma.streamState.upsert({
     where: { streamId },
     update: {},
     create: {
       streamId,
+      label: streamId,
       homeTeamName: '',
       awayTeamName: '',
       homeScore: 0,
@@ -34,19 +35,17 @@ async function ensureInitialized() {
     },
   });
 
-  // 2️⃣ Ensure AuthState exists
-  const existing = await prisma.authState.findUnique({
-    where: { id: 1 },
+  // 2️⃣ Ensure the default court's StreamAuth exists
+  const existingStreamAuth = await prisma.streamAuth.findUnique({
+    where: { streamId },
   });
 
-  if (!existing) {
-    const adminPasswordHash = await argon2.hash(adminPassword);
+  if (!existingStreamAuth) {
     const claimCodeHash = await argon2.hash(claimCode);
 
-    await prisma.authState.create({
+    await prisma.streamAuth.create({
       data: {
-        id: 1,
-        adminPasswordHash,
+        streamId,
         claimCodeHash,
         claimCodePlaintext: claimCode,
         activeWriteTokenHash: null,
@@ -55,12 +54,28 @@ async function ensureInitialized() {
         lastRequestId: null,
       },
     });
-  } else if (!existing.claimCodePlaintext) {
+  } else if (!existingStreamAuth.claimCodePlaintext) {
     // Backfill for older rows where plaintext is missing.
     // We cannot recover from hash, so seed from current env value.
-    await prisma.authState.update({
-      where: { id: 1 },
+    await prisma.streamAuth.update({
+      where: { streamId },
       data: { claimCodePlaintext: claimCode },
+    });
+  }
+
+  // 3️⃣ Ensure the global AdminAuth singleton exists
+  const existingAdminAuth = await prisma.adminAuth.findUnique({
+    where: { id: 1 },
+  });
+
+  if (!existingAdminAuth) {
+    const adminPasswordHash = await argon2.hash(adminPassword);
+
+    await prisma.adminAuth.create({
+      data: {
+        id: 1,
+        adminPasswordHash,
+      },
     });
   }
 

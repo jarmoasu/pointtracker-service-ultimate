@@ -19,11 +19,16 @@ function isValidClaimCode(value) {
   return /^[a-f0-9]{8}$/.test(value);
 }
 
+function normalizeStreamId(value) {
+  return typeof value === 'string' ? value.trim().toLowerCase() : '';
+}
+
+function isValidStreamId(value) {
+  // Short, URL-friendly slug, e.g. "kentta-1"
+  return /^[a-z0-9][a-z0-9-]{1,31}$/.test(value);
+}
+
 async function adminRoutes(fastify) {
-  // Small cache for public state endpoint to reduce DB load under bursts
-  let publicStateCache = null;
-  let publicStateCacheAt = 0;
-  const PUBLIC_STATE_CACHE_TTL_MS = 1000;
 
   // Login (no session required)
   fastify.post('/admin/login', {
@@ -36,10 +41,9 @@ async function adminRoutes(fastify) {
       return reply.code(400).send({ error: 'password required' });
     }
 
-    const auth = await prisma.authState.findUnique({ where: { id: 1 } });
-    if (!auth) return reply.code(500).send({ error: 'auth state missing' });
+    const auth = await prisma.adminAuth.findUnique({ where: { id: 1 } });
+    if (!auth) return reply.code(500).send({ error: 'admin auth state missing' });
 
-    // Compare to stored hash (created in Sprint 5 init)
     const ok = await argon2.verify(auth.adminPasswordHash, password);
     if (!ok) return reply.code(401).send({ error: 'invalid password' });
 
@@ -63,26 +67,97 @@ async function adminRoutes(fastify) {
     return { ok: true };
   });
 
-  // View state (public, rate limited)
-  fastify.get('/admin/state', {
-    config: {
-      rateLimit: { max: 60, timeWindow: '1 minute' },
-    },
-  }, async () => {
-    const now = Date.now();
-    if (publicStateCache && (now - publicStateCacheAt) < PUBLIC_STATE_CACHE_TTL_MS) {
-      return publicStateCache;
+  // Create a new court (admin only, rate limited)
+  fastify.post('/admin/streams', {
+    preHandler: requireAdmin,
+    config: { rateLimit: { max: 30, timeWindow: '10 minutes' } },
+  }, async (request, reply) => {
+    const body = request.body || {};
+    const streamId = normalizeStreamId(body.streamId);
+    const label = typeof body.label === 'string' ? body.label.trim() : '';
+
+    if (!isValidStreamId(streamId)) {
+      return reply.code(400).send({
+        error: 'streamId must be 2-32 chars: lowercase letters, numbers, and dashes, starting with a letter or number',
+      });
     }
 
-    const streamId = process.env.STREAM_ID || 'main';
+    const existing = await prisma.streamState.findUnique({ where: { streamId } });
+    if (existing) {
+      return reply.code(409).send({ error: 'streamId already exists' });
+    }
+
+    const claimCode = randomClaimCode();
+    const claimCodeHash = await argon2.hash(claimCode);
+
+    await prisma.$transaction([
+      prisma.streamState.create({
+        data: {
+          streamId,
+          label: label || streamId,
+          homeTeamName: '',
+          awayTeamName: '',
+          homeScore: 0,
+          awayScore: 0,
+          gameClockSeconds: 0,
+        },
+      }),
+      prisma.streamAuth.create({
+        data: {
+          streamId,
+          claimCodeHash,
+          claimCodePlaintext: claimCode,
+        },
+      }),
+    ]);
+
+    return { streamId, label: label || streamId, claimCode };
+  });
+
+  // List all courts (admin only)
+  fastify.get('/admin/streams', { preHandler: requireAdmin }, async () => {
+    const [states, auths] = await Promise.all([
+      prisma.streamState.findMany({ orderBy: { createdAt: 'desc' } }),
+      prisma.streamAuth.findMany(),
+    ]);
+
+    const authByStreamId = new Map(auths.map((a) => [a.streamId, a]));
+
+    return {
+      streams: states.map((state) => {
+        const auth = authByStreamId.get(state.streamId);
+        return {
+          streamId: state.streamId,
+          label: state.label || state.streamId,
+          state,
+          writer: auth
+            ? {
+                activeWriterName: auth.activeWriterName,
+                claimedAt: auth.claimedAt,
+                hasActiveWriteToken: Boolean(auth.activeWriteTokenHash),
+              }
+            : null,
+        };
+      }),
+    };
+  });
+
+  // Single court detail (admin only)
+  fastify.get('/admin/streams/:streamId', { preHandler: requireAdmin }, async (request, reply) => {
+    const { streamId } = request.params;
 
     const [state, auth] = await Promise.all([
       prisma.streamState.findUnique({ where: { streamId } }),
-      prisma.authState.findUnique({ where: { id: 1 } }),
+      prisma.streamAuth.findUnique({ where: { streamId } }),
     ]);
 
-    const payload = {
+    if (!state) {
+      return reply.code(404).send({ error: 'unknown stream' });
+    }
+
+    return {
       streamId,
+      label: state.label || streamId,
       state,
       writer: auth
         ? {
@@ -92,67 +167,86 @@ async function adminRoutes(fastify) {
           }
         : null,
     };
-
-    publicStateCache = payload;
-    publicStateCacheAt = now;
-    return payload;
   });
 
-  // Current claim code (admin only)
-  fastify.get('/admin/claim-code', { preHandler: requireAdmin }, async () => {
-    const auth = await prisma.authState.findUnique({ where: { id: 1 } });
-    return { claimCode: auth?.claimCodePlaintext || null };
+  // Delete a court (admin only)
+  fastify.delete('/admin/streams/:streamId', { preHandler: requireAdmin }, async (request, reply) => {
+    const { streamId } = request.params;
+
+    const existing = await prisma.streamState.findUnique({ where: { streamId } });
+    if (!existing) {
+      return reply.code(404).send({ error: 'unknown stream' });
+    }
+
+    await prisma.$transaction([
+      prisma.streamState.delete({ where: { streamId } }),
+      prisma.streamAuth.deleteMany({ where: { streamId } }),
+    ]);
+
+    return { ok: true };
   });
 
-  // Set claim code manually (admin only)
-  fastify.post('/admin/set-claim', {
+  // Current claim code for a court (admin only)
+  fastify.get('/admin/streams/:streamId/claim-code', { preHandler: requireAdmin }, async (request, reply) => {
+    const { streamId } = request.params;
+    const auth = await prisma.streamAuth.findUnique({ where: { streamId } });
+    if (!auth) return reply.code(404).send({ error: 'unknown stream' });
+    return { claimCode: auth.claimCodePlaintext || null };
+  });
+
+  // Set a court's claim code manually (admin only)
+  fastify.post('/admin/streams/:streamId/set-claim', {
     preHandler: requireAdmin,
     config: { rateLimit: { max: 20, timeWindow: '10 minutes' } },
   }, async (request, reply) => {
+    const { streamId } = request.params;
     const raw = request.body?.claimCode;
     const claimCode = normalizeClaimCode(raw);
     if (!isValidClaimCode(claimCode)) {
       return reply.code(400).send({ error: 'claimCode must be exactly 8 hex characters (0-9, a-f)' });
     }
 
+    const existing = await prisma.streamAuth.findUnique({ where: { streamId } });
+    if (!existing) return reply.code(404).send({ error: 'unknown stream' });
+
     const claimCodeHash = await argon2.hash(claimCode);
-    await prisma.authState.update({
-      where: { id: 1 },
-      data: {
-        claimCodeHash,
-        claimCodePlaintext: claimCode,
-      },
+    await prisma.streamAuth.update({
+      where: { streamId },
+      data: { claimCodeHash, claimCodePlaintext: claimCode },
     });
 
     return { ok: true, claimCode };
   });
 
-  // Rotate claim code (rate limited)
-  fastify.post('/admin/rotate-claim', {
+  // Rotate a court's claim code (admin only, rate limited)
+  fastify.post('/admin/streams/:streamId/rotate-claim', {
     preHandler: requireAdmin,
     config: { rateLimit: { max: 10, timeWindow: '10 minutes' } },
-  }, async () => {
+  }, async (request, reply) => {
+    const { streamId } = request.params;
+    const existing = await prisma.streamAuth.findUnique({ where: { streamId } });
+    if (!existing) return reply.code(404).send({ error: 'unknown stream' });
+
     const newCode = randomClaimCode();
     const newHash = await argon2.hash(newCode);
 
-    await prisma.authState.update({
-      where: { id: 1 },
-      data: {
-        claimCodeHash: newHash,
-        claimCodePlaintext: newCode,
-      },
+    await prisma.streamAuth.update({
+      where: { streamId },
+      data: { claimCodeHash: newHash, claimCodePlaintext: newCode },
     });
 
-    // Return the new code so admin can share it (or show QR in Sprint 9)
     return { claimCode: newCode };
   });
 
-  // Reset stream state (new game)
-  fastify.post('/admin/reset', {
+  // Reset a court's game state (new game) — admin only, rate limited
+  fastify.post('/admin/streams/:streamId/reset', {
     preHandler: requireAdmin,
     config: { rateLimit: { max: 10, timeWindow: '10 minutes' } },
-  }, async () => {
-    const streamId = process.env.STREAM_ID || 'main';
+  }, async (request, reply) => {
+    const { streamId } = request.params;
+
+    const existing = await prisma.streamState.findUnique({ where: { streamId } });
+    if (!existing) return reply.code(404).send({ error: 'unknown stream' });
 
     await prisma.streamState.update({
       where: { streamId },
@@ -162,6 +256,8 @@ async function adminRoutes(fastify) {
         homeScore: 0,
         awayScore: 0,
         gameClockSeconds: 0,
+        clockRunning: false,
+        clockStartedAt: null,
         lastScoreTeam: null,
         lastScorer: null,
         lastAssist: null,
@@ -169,9 +265,9 @@ async function adminRoutes(fastify) {
       },
     });
 
-    // Also clear idempotency + writer token if you want clean start:
-    await prisma.authState.update({
-      where: { id: 1 },
+    // Also clear idempotency + writer token for a clean start:
+    await prisma.streamAuth.update({
+      where: { streamId },
       data: {
         lastRequestId: null,
         activeWriteTokenHash: null,

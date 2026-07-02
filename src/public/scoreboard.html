@@ -215,7 +215,9 @@
     'use strict';
 
     // ─── CONFIG ──────────────────────────────────────────────────────────────
-    const API_URL   = 'https://pointtracker-service-ultimate.onrender.com/live';
+    const API_BASE = 'https://pointtracker-service-ultimate.onrender.com';
+    const STREAM_ID = new URLSearchParams(location.search).get('stream');
+    const API_URL   = STREAM_ID ? `${API_BASE}/streams/${encodeURIComponent(STREAM_ID)}/live` : null;
     const POLL_MS    = 5000;
     const TICK_MS    = 250;
 
@@ -323,6 +325,7 @@
     // ─── FETCH ───────────────────────────────────────────────────────────────
 
     async function poll() {
+      if (!API_URL) return;
       try {
         const res = await fetch(API_URL, { cache: 'no-store' });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -367,9 +370,18 @@
     void requestWakeLock();
 
     // ─── BOOT ────────────────────────────────────────────────────────────────
-    poll();
-    setInterval(poll, POLL_MS);
-    setInterval(tick, TICK_MS);
+    if (!API_URL) {
+      el.homeName.textContent = 'Puuttuva kenttä';
+      el.clock.textContent = '--:--';
+      el.homeScore.textContent = '';
+      el.awayScore.textContent = '';
+      el.updatedTime.textContent = 'Lisää osoitteeseen ?stream=<kentän-tunnus>';
+      show(el.updatedTime, true);
+    } else {
+      poll();
+      setInterval(poll, POLL_MS);
+      setInterval(tick, TICK_MS);
+    }
   </script>
 </body>
 </html>
