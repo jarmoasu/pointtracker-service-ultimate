@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Kentät — PointTracker</title>
+  <style>
+    :root {
+      --color-bg:        #0b0d12;
+      --color-panel:     #14171f;
+      --color-border:    #262b36;
+      --color-text:      #f2f3f5;
+      --color-text-dim:  #9aa1ac;
+      --color-accent:    #00c2ff;
+      --color-live:      #2ed573;
+      --color-live-bg:   rgba(46, 213, 115, 0.12);
+      --color-idle-bg:   rgba(255, 255, 255, 0.04);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 32px 20px 60px;
+      background: var(--color-bg);
+      color: var(--color-text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+    }
+
+    h1 {
+      max-width: 960px;
+      margin: 0 auto 4px;
+      font-size: 24px;
+    }
+
+    .subtitle {
+      max-width: 960px;
+      margin: 0 auto 28px;
+      color: var(--color-text-dim);
+      font-size: 14px;
+    }
+
+    #empty {
+      max-width: 960px;
+      margin: 0 auto;
+      color: var(--color-text-dim);
+    }
+
+    .court {
+      max-width: 960px;
+      margin: 0 auto 14px;
+      background: var(--color-panel);
+      border: 1px solid var(--color-border);
+      border-radius: 12px;
+      padding: 16px 20px;
+    }
+
+    .court.running {
+      border-color: rgba(46, 213, 115, 0.45);
+    }
+
+    .court-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .court-name {
+      font-size: 17px;
+      font-weight: 700;
+    }
+
+    .court-id {
+      color: var(--color-text-dim);
+      font-weight: 400;
+      font-size: 13px;
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.4px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: var(--color-idle-bg);
+      color: var(--color-text-dim);
+    }
+
+    .status-badge.running {
+      background: var(--color-live-bg);
+      color: var(--color-live);
+    }
+
+    .status-badge .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .status-badge.running .dot {
+      animation: pulse 1.6s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%      { opacity: 0.3; }
+    }
+
+    .score-line {
+      margin-top: 10px;
+      font-size: 20px;
+      font-weight: 700;
+      font-feature-settings: 'tnum';
+    }
+
+    .score-line .clock {
+      font-family: 'Courier New', monospace;
+      color: var(--color-accent);
+      margin-left: 14px;
+      font-size: 16px;
+    }
+
+    .meta-grid {
+      margin-top: 12px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 6px 20px;
+      font-size: 13px;
+      color: var(--color-text-dim);
+    }
+
+    .meta-grid b {
+      color: var(--color-text);
+      font-weight: 600;
+    }
+
+    .links {
+      margin-top: 14px;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .links a {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+      text-decoration: none;
+      color: var(--color-text);
+      background: var(--color-idle-bg);
+      border: 1px solid var(--color-border);
+      border-radius: 8px;
+      padding: 6px 12px;
+    }
+
+    .links a:hover {
+      border-color: var(--color-accent);
+      color: var(--color-accent);
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Kentät</h1>
+  <div class="subtitle" id="subtitle">Ladataan…</div>
+  <div id="empty" class="hidden" style="display:none;">Ei vielä yhtään kenttää.</div>
+  <div id="courtList"></div>
+
+  <script>
+    'use strict';
+
+    const API_URL = '/streams';
+    const POLL_MS = 5000;
+    const TICK_MS = 1000;
+
+    let latestStreams = [];
+    let clockOffsetMs = 0;
+
+    function formatClock(totalSeconds) {
+      if (totalSeconds == null || !isFinite(totalSeconds)) return '--:--';
+      const s = Math.max(0, Math.floor(totalSeconds));
+      const mm = String(Math.floor(s / 60)).padStart(2, '0');
+      const ss = String(s % 60).padStart(2, '0');
+      return `${mm}:${ss}`;
+    }
+
+    function liveClockSeconds(court) {
+      if (!court.clockRunning || !court.clockStartedAt) return court.gameClockSeconds;
+      const startedAtMs = new Date(court.clockStartedAt).getTime();
+      const nowServerMs = Date.now() + clockOffsetMs;
+      return court.gameClockSeconds + Math.max(0, (nowServerMs - startedAtMs) / 1000);
+    }
+
+    function formatRelativeTime(iso) {
+      if (!iso) return '—';
+      const diffMs = Date.now() + clockOffsetMs - new Date(iso).getTime();
+      const diffSec = Math.max(0, Math.round(diffMs / 1000));
+      if (diffSec < 5) return 'juuri nyt';
+      if (diffSec < 60) return `${diffSec} s sitten`;
+      const diffMin = Math.round(diffSec / 60);
+      if (diffMin < 60) return `${diffMin} min sitten`;
+      const diffHour = Math.round(diffMin / 60);
+      if (diffHour < 48) return `${diffHour} h sitten`;
+      return new Date(iso).toLocaleString('fi-FI');
+    }
+
+    function describeClaim(writer) {
+      if (!writer || !writer.activeWriterName) {
+        return writer ? 'Claimattu (nimetön laite)' : 'Ei claimattu';
+      }
+      const when = writer.claimedAt ? new Date(writer.claimedAt).toLocaleString('fi-FI') : '';
+      return `${writer.activeWriterName}${when ? ' — ' + when : ''}`;
+    }
+
+    function courtHtml(court) {
+      const running = Boolean(court.clockRunning);
+      const home = court.homeTeamName || 'Home';
+      const away = court.awayTeamName || 'Away';
+      const scoreboardUrl = `/scoreboard.html?stream=${encodeURIComponent(court.streamId)}`;
+      const overlayUrl = `/overlay.html?stream=${encodeURIComponent(court.streamId)}`;
+      const feedUrl = `/streams/${encodeURIComponent(court.streamId)}/live`;
+
+      return `
+        <div class="court ${running ? 'running' : ''}" data-stream-id="${court.streamId}">
+          <div class="court-top">
+            <div class="court-name">${court.label} <span class="court-id">${court.streamId}</span></div>
+            <div class="status-badge ${running ? 'running' : ''}">
+              <span class="dot"></span>
+              ${running ? 'PELI KÄYNNISSÄ' : 'EI KÄYNNISSÄ'}
+            </div>
+          </div>
+          <div class="score-line">
+            ${home} ${court.homeScore} - ${court.awayScore} ${away}
+            <span class="clock" data-clock>${formatClock(liveClockSeconds(court))}</span>
+          </div>
+          <div class="meta-grid">
+            <div>Claimattu: <b>${describeClaim(court.writer)}</b></div>
+            <div>Viimeisin tapahtuma: <b data-updated>${formatRelativeTime(court.updatedAt)}</b></div>
+          </div>
+          <div class="links">
+            <a href="${scoreboardUrl}" target="_blank">Scoreboard</a>
+            <a href="${feedUrl}" target="_blank">Feed (Stream State)</a>
+            <a href="${overlayUrl}" target="_blank">Overlay</a>
+          </div>
+        </div>
+      `;
+    }
+
+    function render(streams) {
+      const listEl = document.getElementById('courtList');
+      const emptyEl = document.getElementById('empty');
+      const subtitleEl = document.getElementById('subtitle');
+
+      subtitleEl.textContent = `${streams.length} kenttä${streams.length === 1 ? '' : 'ä'} — päivittyy automaattisesti`;
+
+      if (streams.length === 0) {
+        listEl.innerHTML = '';
+        emptyEl.style.display = 'block';
+        return;
+      }
+
+      emptyEl.style.display = 'none';
+      listEl.innerHTML = streams.map(courtHtml).join('');
+    }
+
+    function tick() {
+      latestStreams.forEach((court) => {
+        const row = document.querySelector(`.court[data-stream-id="${CSS.escape(court.streamId)}"]`);
+        if (!row) return;
+        const clockEl = row.querySelector('[data-clock]');
+        if (clockEl) clockEl.textContent = formatClock(liveClockSeconds(court));
+        const updatedEl = row.querySelector('[data-updated]');
+        if (updatedEl) updatedEl.textContent = formatRelativeTime(court.updatedAt);
+      });
+    }
+
+    async function poll() {
+      try {
+        const res = await fetch(API_URL, { cache: 'no-store' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+
+        const serverNowMs = data.serverNow ? new Date(data.serverNow).getTime() : Date.now();
+        clockOffsetMs = serverNowMs - Date.now();
+        latestStreams = data.streams || [];
+
+        render(latestStreams);
+      } catch (err) {
+        console.warn('[streams] fetch error:', err.message);
+        document.getElementById('subtitle').textContent = 'Yhteysvirhe — yritetään uudelleen…';
+      }
+    }
+
+    poll();
+    setInterval(poll, POLL_MS);
+    setInterval(tick, TICK_MS);
+  </script>
+</body>
+</html>

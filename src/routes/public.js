@@ -10,6 +10,53 @@ async function publicRoutes(fastify) {
     return { ready: true };
   });
 
+  // Public listing of every court (for the /streams.html directory page).
+  // Deliberately includes who claimed a court and when — useful for a public
+  // status page — but never claim codes or write tokens.
+  fastify.get('/streams', {
+    config: {
+      rateLimit: { max: 60, timeWindow: '1 minute' },
+    },
+  }, async (request, reply) => {
+    const [states, auths] = await Promise.all([
+      prisma.streamState.findMany(),
+      prisma.streamAuth.findMany({
+        select: { streamId: true, activeWriterName: true, claimedAt: true, activeWriteTokenHash: true },
+      }),
+    ]);
+
+    const authByStreamId = new Map(auths.map((a) => [a.streamId, a]));
+    const serverNow = new Date().toISOString();
+
+    reply.header('Cache-Control', 'no-store');
+
+    const streams = states
+      .map((state) => {
+        const auth = authByStreamId.get(state.streamId);
+        return {
+          streamId: state.streamId,
+          label: state.label || state.streamId,
+          homeTeamName: state.homeTeamName,
+          awayTeamName: state.awayTeamName,
+          homeScore: state.homeScore,
+          awayScore: state.awayScore,
+          gameClockSeconds: state.gameClockSeconds,
+          clockRunning: state.clockRunning,
+          clockStartedAt: state.clockStartedAt,
+          updatedAt: state.updatedAt,
+          writer: auth && auth.activeWriteTokenHash
+            ? { activeWriterName: auth.activeWriterName, claimedAt: auth.claimedAt }
+            : null,
+        };
+      })
+      .sort((a, b) => {
+        if (a.clockRunning !== b.clockRunning) return a.clockRunning ? -1 : 1;
+        return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+      });
+
+    return { streams, serverNow };
+  });
+
   // Public live endpoint for a single court
   fastify.get('/streams/:streamId/live', async (request, reply) => {
     const { streamId } = request.params;
