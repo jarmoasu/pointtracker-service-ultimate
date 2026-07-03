@@ -82,7 +82,7 @@
       bottom: 86px;
       left: 50%;
       transform: translateX(-50%) translateY(14px);
-      width: 720px;
+      width: 760px;
       height: 74px;
       display: flex;
       align-items: stretch;
@@ -125,12 +125,51 @@
 
     .team-panel.home {
       justify-content: flex-end;
-      border-right: 1px solid var(--color-divider);
     }
 
     .team-panel.away {
       flex-direction: row-reverse;
       justify-content: flex-end;
+    }
+
+    /* Center clock segment, broadcast-bug style */
+    .clock-panel {
+      flex: 0 0 auto;
+      width: 104px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      background: var(--color-bg-panel-alt);
+      border-left: 1px solid var(--color-divider);
+      border-right: 1px solid var(--color-divider);
+    }
+
+    #game-clock {
+      font-family: var(--font-mono);
+      font-weight: 700;
+      font-size: 22px;
+      color: var(--color-text-primary);
+      letter-spacing: 0.02em;
+      font-feature-settings: 'tnum';
+      line-height: 1;
+    }
+
+    .clock-panel.running #game-clock::before {
+      content: '';
+      display: inline-block;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #2ed573;
+      margin-right: 7px;
+      vertical-align: middle;
+      animation: pulse 1.6s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%      { opacity: 0.25; }
     }
 
     .team-name {
@@ -254,6 +293,9 @@
       <span class="team-name" id="home-name">—</span>
       <span class="team-score" id="home-score">0</span>
     </div>
+    <div class="clock-panel" id="clock-panel">
+      <span id="game-clock">--:--</span>
+    </div>
     <div class="team-panel away">
       <span class="team-score" id="away-score">0</span>
       <span class="team-name" id="away-name">—</span>
@@ -279,12 +321,15 @@
     const STREAM_ID        = new URLSearchParams(location.search).get('stream');
     const API_URL          = STREAM_ID ? `${API_BASE}/streams/${encodeURIComponent(STREAM_ID)}/live` : null;
     const POLL_MS          = 5000;
+    const TICK_MS          = 250;
     const GOAL_DISPLAY_MS  = 14000;
 
     // ─── STATE ───────────────────────────────────────────────────────────────
-    let prev         = null;
-    let firstRender  = true;
-    let goalTimer    = null;
+    let prev          = null;
+    let latest        = null;  // last /live payload, for clock interpolation
+    let clockOffsetMs = 0;     // serverNow - Date.now(), refreshed every poll
+    let firstRender   = true;
+    let goalTimer     = null;
 
     // ─── DOM REFS ─────────────────────────────────────────────────────────────
     const el = {
@@ -295,6 +340,8 @@
       awayName:    document.getElementById('away-name'),
       homeScore:   document.getElementById('home-score'),
       awayScore:   document.getElementById('away-score'),
+      clockPanel:  document.getElementById('clock-panel'),
+      gameClock:   document.getElementById('game-clock'),
       goalNotif:   document.getElementById('goal-notification'),
       goalTeam:    document.getElementById('goal-team-name'),
       goalScorer:  document.getElementById('goal-scorer'),
@@ -309,11 +356,37 @@
     }
 
     function formatClock(seconds) {
-      if (seconds == null || !isFinite(seconds)) return '—:——';
+      if (seconds == null || !isFinite(seconds)) return '--:--';
       const s  = Math.max(0, Math.floor(seconds));
       const mm = String(Math.floor(s / 60)).padStart(2, '0');
       const ss = String(s % 60).padStart(2, '0');
       return `${mm}:${ss}`;
+    }
+
+    // The server only tells us gameClockSeconds as of `updatedAt`, plus
+    // whether the clock is running and when it last started (clockStartedAt).
+    // The game clock starts once (game start) and stops once (game end) — no
+    // pausing in between — so while running we just add elapsed real time
+    // since clockStartedAt, corrected for client/server clock drift via the
+    // serverNow timestamp captured on the last poll.
+    function computeDisplaySeconds() {
+      if (!latest) return null;
+
+      if (!latest.clockRunning || !latest.clockStartedAt) {
+        return latest.gameClockSeconds;
+      }
+
+      const startedAtMs  = new Date(latest.clockStartedAt).getTime();
+      const nowServerMs  = Date.now() + clockOffsetMs;
+      const elapsedSince = Math.max(0, (nowServerMs - startedAtMs) / 1000);
+
+      return latest.gameClockSeconds + elapsedSince;
+    }
+
+    function tick() {
+      const seconds = computeDisplaySeconds();
+      el.gameClock.textContent = formatClock(seconds);
+      el.clockPanel.classList.toggle('running', Boolean(latest && latest.clockRunning));
     }
 
     function formatUpdatedAt(iso) {
@@ -436,7 +509,13 @@
         const res = await fetch(API_URL, { cache: 'no-store' });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
+
+        const serverNowMs = data.serverNow ? new Date(data.serverNow).getTime() : Date.now();
+        clockOffsetMs = serverNowMs - Date.now();
+        latest = data;
+
         render(data);
+        tick();
       } catch (err) {
         console.warn('[overlay] fetch error:', err.message);
         show(el.errorInd, true);
@@ -451,6 +530,9 @@
       awayTeamName: 'Neon Pulse Titans',
       homeScore: 2,
       awayScore: 1,
+      gameClockSeconds: 754,
+      clockRunning: true,
+      clockStartedAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       lastScore: {
         team: 'home',
@@ -459,12 +541,13 @@
         gameClockSeconds: null,
       },
     };
-    if (TEST_MODE) { render(TEST_DATA); }
+    if (TEST_MODE) { latest = TEST_DATA; render(TEST_DATA); tick(); }
     // ─────────────────────────────────────────────────────────────────────────
 
     // ─── BOOT ────────────────────────────────────────────────────────────────
     poll();
     setInterval(poll, POLL_MS);
+    setInterval(tick, TICK_MS);
   </script>
 </body>
 </html>
