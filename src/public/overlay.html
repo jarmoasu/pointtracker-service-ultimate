@@ -204,6 +204,46 @@
       100% { color: var(--color-text-primary); transform: scale(1); }
     }
 
+    /* ─── BREAK INDICATOR (timeout / halftime) ─────────────────────────────── */
+    #break-indicator {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%) translateY(10px);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--color-bg-panel-alt);
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      border-top: 2px solid var(--color-accent);
+      border-radius: var(--radius-sm);
+      padding: 8px 20px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity var(--transition), transform var(--transition);
+    }
+
+    #break-indicator.visible {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    #break-label {
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--color-accent);
+    }
+
+    #break-clock {
+      font-family: var(--font-mono);
+      font-weight: 700;
+      font-size: 16px;
+      color: var(--color-text-primary);
+      font-feature-settings: 'tnum';
+    }
+
     /* ─── GOAL NOTIFICATION ─────────────────────────────────────────────────── */
     #goal-notification {
       position: absolute;
@@ -302,6 +342,11 @@
     </div>
   </div>
 
+  <div id="break-indicator">
+    <span id="break-label"></span>
+    <span id="break-clock">00:00</span>
+  </div>
+
   <div id="goal-notification">
     <div class="goal-header">
       <span class="goal-label">Goal</span>
@@ -342,6 +387,9 @@
       awayScore:   document.getElementById('away-score'),
       clockPanel:  document.getElementById('clock-panel'),
       gameClock:   document.getElementById('game-clock'),
+      breakInd:    document.getElementById('break-indicator'),
+      breakLabel:  document.getElementById('break-label'),
+      breakClock:  document.getElementById('break-clock'),
       goalNotif:   document.getElementById('goal-notification'),
       goalTeam:    document.getElementById('goal-team-name'),
       goalScorer:  document.getElementById('goal-scorer'),
@@ -387,6 +435,25 @@
       const seconds = computeDisplaySeconds();
       el.gameClock.textContent = formatClock(seconds);
       el.clockPanel.classList.toggle('running', Boolean(latest && latest.clockRunning));
+
+      const breakActive = Boolean(latest && latest.breakActive);
+      show(el.breakInd, breakActive);
+      if (breakActive) {
+        el.breakLabel.textContent = BREAK_LABELS[latest.breakType] || '';
+        el.breakClock.textContent = formatClock(computeBreakSeconds());
+      }
+    }
+
+    // Timeout/halftime is a separate, independent count-up from when it
+    // started — it never pauses or affects the main game clock above.
+    const BREAK_LABELS = { timeout: 'Timeout', halftime: 'Halftime' };
+
+    function computeBreakSeconds() {
+      if (!latest || !latest.breakActive || !latest.breakStartedAt) return null;
+
+      const startedAtMs  = new Date(latest.breakStartedAt).getTime();
+      const nowServerMs  = Date.now() + clockOffsetMs;
+      return Math.max(0, (nowServerMs - startedAtMs) / 1000);
     }
 
     function formatUpdatedAt(iso) {

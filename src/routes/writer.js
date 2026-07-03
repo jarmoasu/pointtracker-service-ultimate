@@ -151,6 +151,41 @@ async function writerRoutes(fastify) {
     return { ok: true };
   });
 
+  // Start/stop a timeout or halftime break (rate limited)
+  // Count-up only: the client never sends a duration or which team, just
+  // "this kind of break started" / "it ended". The main game clock is
+  // untouched by this — it keeps running the whole time.
+  fastify.put('/streams/:streamId/break', {
+    preHandler: requireWriter,
+    config: {
+      rateLimit: {
+        max: 60,
+        timeWindow: '1 minute',
+      },
+    },
+  }, async (request, reply) => {
+    const { type, active } = request.body || {};
+
+    if (type !== 'timeout' && type !== 'halftime') {
+      return reply.code(400).send({ error: 'type must be "timeout" or "halftime"' });
+    }
+
+    if (typeof active !== 'boolean') {
+      return reply.code(400).send({ error: 'active must be a boolean' });
+    }
+
+    const { streamId } = request.params;
+
+    await prisma.streamState.update({
+      where: { streamId },
+      data: active
+        ? { breakActive: true, breakType: type, breakStartedAt: new Date() }
+        : { breakActive: false, breakType: null, breakStartedAt: null },
+    });
+
+    return { ok: true };
+  });
+
   // Update result (rate limited)
   // POST /streams/:streamId/update_result
   // Body:

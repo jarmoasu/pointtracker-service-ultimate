@@ -71,6 +71,9 @@ async function publicRoutes(fastify) {
         gameClockSeconds: true,
         clockRunning: true,
         clockStartedAt: true,
+        breakActive: true,
+        breakType: true,
+        breakStartedAt: true,
         lastScoreTeam: true,
         lastScorer: true,
         lastAssist: true,
@@ -100,6 +103,9 @@ async function publicRoutes(fastify) {
       gameClockSeconds: state.gameClockSeconds,
       clockRunning: state.clockRunning,
       clockStartedAt: state.clockStartedAt,
+      breakActive: state.breakActive,
+      breakType: state.breakType,
+      breakStartedAt: state.breakStartedAt,
       lastScore: state.lastScoreTeam
         ? {
             team: state.lastScoreTeam,

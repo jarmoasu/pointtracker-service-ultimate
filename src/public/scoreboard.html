@@ -89,6 +89,36 @@
       50%      { opacity: 0.25; }
     }
 
+    /* ─── BREAK (timeout / halftime) ────────────────────────────────────────── */
+    #break-row {
+      flex: 0 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: clamp(8px, 1.5vw, 16px);
+      padding: 0 0 clamp(8px, 2vh, 20px);
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+
+    #break-row.visible { opacity: 1; }
+
+    #break-label {
+      font-size: clamp(12px, 1.6vw, 22px);
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--color-accent);
+    }
+
+    #break-clock {
+      font-family: var(--font-mono);
+      font-weight: 700;
+      font-size: clamp(16px, 2.4vw, 32px);
+      color: var(--color-text-primary);
+      font-feature-settings: 'tnum';
+    }
+
     /* ─── SCORES ────────────────────────────────────────────────────────────── */
     #score-row {
       flex: 1 1 auto;
@@ -194,6 +224,11 @@
       <div id="clock">--:--</div>
     </div>
 
+    <div id="break-row">
+      <span id="break-label"></span>
+      <span id="break-clock">00:00</span>
+    </div>
+
     <div id="score-row">
       <div class="team-panel home">
         <div class="team-name" id="home-name">—</div>
@@ -232,6 +267,9 @@
     const el = {
       errorInd:    document.getElementById('error-indicator'),
       clock:       document.getElementById('clock'),
+      breakRow:    document.getElementById('break-row'),
+      breakLabel:  document.getElementById('break-label'),
+      breakClock:  document.getElementById('break-clock'),
       homeName:    document.getElementById('home-name'),
       awayName:    document.getElementById('away-name'),
       homeScore:   document.getElementById('home-score'),
@@ -291,10 +329,29 @@
       return latest.gameClockSeconds + elapsedSince;
     }
 
+    // Timeout/halftime is a separate, independent count-up from when it
+    // started — it never pauses or affects the main game clock above.
+    const BREAK_LABELS = { timeout: 'Timeout', halftime: 'Halftime' };
+
+    function computeBreakSeconds() {
+      if (!latest || !latest.breakActive || !latest.breakStartedAt) return null;
+
+      const startedAtMs  = new Date(latest.breakStartedAt).getTime();
+      const nowServerMs  = Date.now() + clockOffsetMs;
+      return Math.max(0, (nowServerMs - startedAtMs) / 1000);
+    }
+
     function tick() {
       const seconds = computeDisplaySeconds();
       el.clock.textContent = formatClock(seconds);
       el.clock.classList.toggle('running', Boolean(latest && latest.clockRunning));
+
+      const breakActive = Boolean(latest && latest.breakActive);
+      show(el.breakRow, breakActive);
+      if (breakActive) {
+        el.breakLabel.textContent = BREAK_LABELS[latest.breakType] || '';
+        el.breakClock.textContent = formatClock(computeBreakSeconds());
+      }
     }
 
     // ─── RENDER ──────────────────────────────────────────────────────────────

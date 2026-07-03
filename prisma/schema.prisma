@@ -22,6 +22,13 @@ model StreamState {
   clockRunning         Boolean  @default(false)
   clockStartedAt       DateTime?
 
+  // Timeout/halftime break, tracked independently of the main game clock
+  // (which never pauses for these). Count-up only — no configured duration
+  // or which-team info is stored server-side.
+  breakActive          Boolean  @default(false)
+  breakType            String?  // "timeout" | "halftime"
+  breakStartedAt       DateTime?
+
   lastScoreTeam        String?  // "home" | "away"
   lastScorer           String?
   lastAssist           String?
