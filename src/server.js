@@ -16,6 +16,7 @@ const { ensureInitialized } = require('./lib/init');
 const publicRoutes = require('./routes/public');
 const writerRoutes = require('./routes/writer');
 const adminRoutes = require('./routes/admin');
+const nimenhuutoRoutes = require('./routes/nimenhuuto');
 
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || '0.0.0.0';
@@ -84,6 +85,7 @@ async function start() {
     fastify.register(publicRoutes);
     fastify.register(writerRoutes);
     fastify.register(adminRoutes);
+    fastify.register(nimenhuutoRoutes);
 
     // --- DB init (creates StreamState/AuthState if missing) ---
     const { streamId } = await ensureInitialized();

@@ -346,7 +346,29 @@
     <!-- STEP 2: PLAYERS -->
     <div class="screen" id="screen-2">
       <div class="panel">
-        <h2>Lisää pelaaja</h2>
+        <h2>Tuo pelaajat Nimenhuudosta</h2>
+        <p class="hint">Liitä Nimenhuuto-tapahtuman URL (esim. https://ufomixed.nimenhuuto.com/events/20143577). Nimet haetaan tapahtuman julkisesta ilmoittautumislistasta — sukupuoli ja ominaisuudet lisätään käsin tuonnin jälkeen.</p>
+
+        <div class="add-attr-row">
+          <input type="text" id="nimenhuutoUrl" placeholder="https://joukkue.nimenhuuto.com/events/12345" />
+          <button class="btn" id="nimenhuutoFetchBtn">Hae pelaajat</button>
+        </div>
+
+        <div class="error-msg" id="nimenhuutoError"></div>
+
+        <div id="nimenhuutoResults" style="display:none; margin-top: 14px;">
+          <div id="nimenhuutoGroups"></div>
+          <div class="btn-row">
+            <span></span>
+            <div class="right">
+              <button class="btn primary" id="nimenhuutoImportBtn">Tuo valitut pelaajiksi</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2 id="playerFormTitle">Lisää pelaaja</h2>
         <p class="hint">Anna pelaajan nimi, sukupuoli ja arvo (1–10) jokaiselle valitulle ominaisuudelle.</p>
 
         <div class="player-form">
@@ -369,7 +391,7 @@
         <div class="error-msg" id="playerError">Anna pelaajalle nimi.</div>
 
         <div class="btn-row">
-          <span></span>
+          <button class="btn" id="cancelEditBtn" style="display:none;">Peruuta muokkaus</button>
           <div class="right">
             <button class="btn primary" id="addPlayerBtn">+ Lisää pelaaja</button>
           </div>
@@ -459,6 +481,12 @@
       return attributes.filter((a) => a.selected);
     }
 
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
     function genderLabel(g) {
       if (g === 'mies') return 'Mies';
       if (g === 'nainen') return 'Nainen';
@@ -502,7 +530,7 @@
       body.innerHTML = attributes.map((a) => `
         <tr data-attr-id="${a.id}">
           <td class="col-check"><input type="checkbox" data-role="attr-check" ${a.selected ? 'checked' : ''} /></td>
-          <td>${a.label}</td>
+          <td>${escapeHtml(a.label)}</td>
           <td class="col-weight"><input type="number" min="1" max="10" data-role="attr-weight" value="${a.weight}" /></td>
           <td class="col-del">${a.custom ? '<button class="btn danger" data-role="attr-del" title="Poista">×</button>' : ''}</td>
         </tr>
@@ -556,7 +584,7 @@
       const container = document.getElementById('playerAttrSliders');
       container.innerHTML = selectedAttrs().map((a) => `
         <div class="attr-slider-row" data-attr-id="${a.id}">
-          <label>${a.label}</label>
+          <label>${escapeHtml(a.label)}</label>
           <input type="range" min="1" max="10" value="5" data-role="attr-slider" />
           <output>5</output>
         </div>
@@ -583,8 +611,12 @@
         const score = computeScore(p, attrs).toFixed(1);
         return `
           <div class="player-row" data-player-id="${p.id}">
-            <span>${p.name}<span class="gender-tag ${p.gender}">${genderLabel(p.gender)}</span></span>
-            <span class="player-score">Pisteet: ${score} &nbsp; <button class="btn danger" data-role="player-del">Poista</button></span>
+            <span>${escapeHtml(p.name)}<span class="gender-tag ${p.gender}">${genderLabel(p.gender)}</span></span>
+            <span class="player-score">
+              Pisteet: ${score} &nbsp;
+              <button class="btn" data-role="player-edit">Muokkaa</button>
+              <button class="btn danger" data-role="player-del">Poista</button>
+            </span>
           </div>
         `;
       }).join('');
@@ -593,10 +625,54 @@
         el.addEventListener('click', (e) => {
           const id = Number(e.target.closest('.player-row').dataset.playerId);
           players = players.filter((p) => p.id !== id);
+          if (editingPlayerId === id) exitEditMode();
           renderPlayerList();
         });
       });
+      listEl.querySelectorAll('[data-role="player-edit"]').forEach((el) => {
+        el.addEventListener('click', (e) => {
+          const id = Number(e.target.closest('.player-row').dataset.playerId);
+          enterEditMode(id);
+        });
+      });
     }
+
+    // --- Add / edit player form (shared) ---
+    let editingPlayerId = null;
+
+    function enterEditMode(playerId) {
+      const player = players.find((p) => p.id === playerId);
+      if (!player) return;
+      editingPlayerId = playerId;
+
+      document.getElementById('playerName').value = player.name;
+      document.getElementById('playerGender').value = player.gender;
+      renderPlayerSliders();
+      document.querySelectorAll('#playerAttrSliders [data-attr-id]').forEach((row) => {
+        const attrId = row.dataset.attrId;
+        const slider = row.querySelector('[data-role="attr-slider"]');
+        const value = player.values[attrId] != null ? player.values[attrId] : 5;
+        slider.value = value;
+        slider.nextElementSibling.textContent = value;
+      });
+
+      document.getElementById('playerFormTitle').textContent = `Muokkaa pelaajaa: ${player.name}`;
+      document.getElementById('addPlayerBtn').textContent = '💾 Tallenna muutokset';
+      document.getElementById('cancelEditBtn').style.display = 'inline-flex';
+      document.getElementById('playerName').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    function exitEditMode() {
+      editingPlayerId = null;
+      document.getElementById('playerName').value = '';
+      document.getElementById('playerGender').value = 'mies';
+      renderPlayerSliders();
+      document.getElementById('playerFormTitle').textContent = 'Lisää pelaaja';
+      document.getElementById('addPlayerBtn').textContent = '+ Lisää pelaaja';
+      document.getElementById('cancelEditBtn').style.display = 'none';
+    }
+
+    document.getElementById('cancelEditBtn').addEventListener('click', exitEditMode);
 
     document.getElementById('addPlayerBtn').addEventListener('click', () => {
       const nameInput = document.getElementById('playerName');
@@ -616,11 +692,115 @@
         values[attrId] = Number(slider.value);
       });
 
-      players.push({ id: nextPlayerId++, name, gender, values });
-      nameInput.value = '';
-      renderPlayerSliders();
+      if (editingPlayerId != null) {
+        const player = players.find((p) => p.id === editingPlayerId);
+        player.name = name;
+        player.gender = gender;
+        player.values = values;
+        exitEditMode();
+      } else {
+        players.push({ id: nextPlayerId++, name, gender, values });
+        nameInput.value = '';
+        renderPlayerSliders();
+        nameInput.focus();
+      }
       renderPlayerList();
-      nameInput.focus();
+    });
+
+    // --- Nimenhuuto import ---
+    let nimenhuutoLastFetch = null; // { in: [...], out: [...] }
+
+    async function fetchNimenhuutoPlayers() {
+      const urlInput = document.getElementById('nimenhuutoUrl');
+      const url = urlInput.value.trim();
+      const errEl = document.getElementById('nimenhuutoError');
+      const resultsEl = document.getElementById('nimenhuutoResults');
+      const fetchBtn = document.getElementById('nimenhuutoFetchBtn');
+
+      errEl.style.display = 'none';
+      resultsEl.style.display = 'none';
+
+      if (!url) {
+        errEl.textContent = 'Liitä Nimenhuuto-tapahtuman URL.';
+        errEl.style.display = 'block';
+        return;
+      }
+
+      fetchBtn.disabled = true;
+      fetchBtn.textContent = 'Haetaan…';
+      try {
+        const res = await fetch(`/api/nimenhuuto/players?url=${encodeURIComponent(url)}`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+
+        nimenhuutoLastFetch = data;
+        renderNimenhuutoGroups(data);
+        resultsEl.style.display = 'block';
+      } catch (err) {
+        errEl.textContent = `Haku epäonnistui: ${err.message}`;
+        errEl.style.display = 'block';
+      } finally {
+        fetchBtn.disabled = false;
+        fetchBtn.textContent = 'Hae pelaajat';
+      }
+    }
+
+    // Flat, index-addressed list backing the import checkboxes. Names are looked
+    // up by index from this array (never read back out of the DOM), so externally
+    // fetched names can't be used to break out of an HTML attribute.
+    let nimenhuutoCandidates = [];
+
+    function renderNimenhuutoGroups(data) {
+      const container = document.getElementById('nimenhuutoGroups');
+      const existingNames = new Set(players.map((p) => p.name.trim().toLowerCase()));
+
+      nimenhuutoCandidates = [
+        ...data.in.map((p) => ({ name: p.name, checkedByDefault: true })),
+        ...data.out.map((p) => ({ name: p.name, checkedByDefault: false })),
+      ];
+
+      function groupHtml(title, startIdx, count) {
+        if (count === 0) return '';
+        const rows = [];
+        for (let i = startIdx; i < startIdx + count; i++) {
+          const candidate = nimenhuutoCandidates[i];
+          const alreadyAdded = existingNames.has(candidate.name.trim().toLowerCase());
+          rows.push(`
+            <div class="checkbox-field" style="margin-bottom: 6px;">
+              <input type="checkbox" data-role="nh-check" data-idx="${i}"
+                ${candidate.checkedByDefault && !alreadyAdded ? 'checked' : ''} ${alreadyAdded ? 'disabled' : ''} />
+              <label style="margin:0; color: var(--color-text);">${escapeHtml(candidate.name)}${alreadyAdded ? ' <span class="gender-tag">jo lisätty</span>' : ''}</label>
+            </div>
+          `);
+        }
+        return `<p class="hint" style="margin-bottom:6px;">${title}</p>${rows.join('')}`;
+      }
+
+      container.innerHTML = groupHtml('Tulossa (In)', 0, data.in.length) + groupHtml('Ei tule (Out)', data.in.length, data.out.length);
+    }
+
+    document.getElementById('nimenhuutoFetchBtn').addEventListener('click', fetchNimenhuutoPlayers);
+
+    document.getElementById('nimenhuutoImportBtn').addEventListener('click', () => {
+      const checked = document.querySelectorAll('#nimenhuutoGroups [data-role="nh-check"]:checked');
+      if (checked.length === 0) return;
+
+      const defaultValues = {};
+      selectedAttrs().forEach((a) => { defaultValues[a.id] = 5; });
+
+      checked.forEach((el) => {
+        const candidate = nimenhuutoCandidates[Number(el.dataset.idx)];
+        if (!candidate) return;
+        players.push({
+          id: nextPlayerId++,
+          name: candidate.name,
+          gender: 'none',
+          values: { ...defaultValues },
+        });
+      });
+
+      renderPlayerList();
+      renderNimenhuutoGroups(nimenhuutoLastFetch); // refresh "jo lisätty" state
     });
 
     document.getElementById('backTo1Btn').addEventListener('click', () => showStep(1));
@@ -686,7 +866,7 @@
           <div class="team-card">
             <h3>Joukkue ${t.index + 1} <span class="score">ka. ${avg}</span></h3>
             <ul>
-              ${t.players.map((p) => `<li><span>${p.name}</span><span class="gender-tag ${p.gender}">${genderLabel(p.gender)}</span></li>`).join('')}
+              ${t.players.map((p) => `<li><span>${escapeHtml(p.name)}</span><span class="gender-tag ${p.gender}">${genderLabel(p.gender)}</span></li>`).join('')}
             </ul>
             <div class="meta">${t.players.length} pelaajaa &middot; ${genderSummary}</div>
           </div>
