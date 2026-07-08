@@ -127,8 +127,6 @@
 
     input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--color-accent); }
 
-    input[type="range"] { accent-color: var(--color-accent); width: 100%; }
-
     .btn {
       display: inline-flex;
       align-items: center;
@@ -174,37 +172,61 @@
       margin-bottom: 14px;
     }
 
-    .attr-slider-row {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      margin-bottom: 8px;
+    .players-table-wrap {
+      overflow-x: auto;
     }
 
-    .attr-slider-row label {
-      flex: 0 0 190px;
-      font-size: 13px;
-      color: var(--color-text-dim);
+    .players-table {
+      width: auto;
+      min-width: 100%;
+      border-collapse: collapse;
     }
 
-    .attr-slider-row output {
-      flex: 0 0 24px;
-      text-align: right;
-      font-weight: 700;
-      font-feature-settings: 'tnum';
-    }
-
-    .player-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-      padding: 8px 4px;
+    .players-table th, .players-table td {
+      padding: 6px 8px;
       border-bottom: 1px solid var(--color-border);
       font-size: 13px;
+      white-space: nowrap;
     }
 
-    .player-row:last-child { border-bottom: none; }
+    .players-table th {
+      color: var(--color-text-dim);
+      font-weight: 600;
+      font-size: 12px;
+      text-align: left;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .players-table th:hover { color: var(--color-accent); }
+
+    .players-table th .sort-arrow {
+      display: inline-block;
+      width: 10px;
+      opacity: 0.6;
+    }
+
+    .players-table td input[type="text"] {
+      min-width: 120px;
+    }
+
+    .players-table td input[type="number"] {
+      width: 52px;
+      text-align: center;
+      padding: 6px 4px;
+    }
+
+    .players-table td select {
+      width: auto;
+      min-width: 90px;
+    }
+
+    .players-table td.col-score {
+      font-weight: 700;
+      color: var(--color-accent);
+      font-variant-numeric: tabular-nums;
+      text-align: right;
+    }
 
     .gender-tag {
       display: inline-block;
@@ -219,11 +241,6 @@
 
     .gender-tag.mies { color: #6db8ff; }
     .gender-tag.nainen { color: #ff8ac2; }
-
-    .player-score {
-      color: var(--color-text-dim);
-      font-variant-numeric: tabular-nums;
-    }
 
     .empty-msg { color: var(--color-text-dim); font-size: 13px; padding: 8px 0; }
 
@@ -318,7 +335,7 @@
     <div class="screen" id="screen-1">
       <div class="panel">
         <h2>Ominaisuudet ja painoarvot</h2>
-        <p class="hint">Valitse mitä ominaisuuksia arvioidaan (1–10 per pelaaja) ja anna kullekin painoarvo (1–10). Voit myös lisätä omia ominaisuuksia.</p>
+        <p class="hint">Valitse mitä ominaisuuksia arvioidaan (asteikolla 1–6 per pelaaja) ja anna kullekin painoarvo (1–5, kuinka tärkeä ominaisuus on joukkuejaossa). Voit myös lisätä omia ominaisuuksia.</p>
 
         <table class="attr-table">
           <thead>
@@ -368,8 +385,8 @@
       </div>
 
       <div class="panel">
-        <h2 id="playerFormTitle">Lisää pelaaja</h2>
-        <p class="hint">Anna pelaajan nimi, sukupuoli ja arvo (1–10) jokaiselle valitulle ominaisuudelle.</p>
+        <h2>Lisää pelaaja</h2>
+        <p class="hint">Anna pelaajan nimi ja sukupuoli. Ominaisuuksien arvot (1–6) muokataan suoraan alla olevasta taulukosta.</p>
 
         <div class="player-form">
           <div class="field-group">
@@ -386,12 +403,10 @@
           </div>
         </div>
 
-        <div id="playerAttrSliders"></div>
-
         <div class="error-msg" id="playerError">Anna pelaajalle nimi.</div>
 
         <div class="btn-row">
-          <button class="btn" id="cancelEditBtn" style="display:none;">Peruuta muokkaus</button>
+          <span></span>
           <div class="right">
             <button class="btn primary" id="addPlayerBtn">+ Lisää pelaaja</button>
           </div>
@@ -400,7 +415,14 @@
 
       <div class="panel">
         <h2>Pelaajat (<span id="playerCount">0</span>)</h2>
-        <div id="playerList"><div class="empty-msg">Ei vielä pelaajia.</div></div>
+        <p class="hint">Klikkaa sarakeotsikkoa järjestääksesi taulukon sen mukaan. Ominaisuusarvot ja nimen voi muokata suoraan soluissa.</p>
+        <div class="players-table-wrap">
+          <table class="players-table">
+            <thead><tr id="playersTableHead"></tr></thead>
+            <tbody id="playersTableBody"></tbody>
+          </table>
+        </div>
+        <div id="playersEmpty" class="empty-msg">Ei vielä pelaajia.</div>
       </div>
 
       <div class="btn-row">
@@ -458,16 +480,16 @@
 
     // --- State (in-memory only, never sent anywhere) ---
     let attributes = [
-      { id: 'heitto', label: 'Heittotaito', weight: 8, selected: true, custom: false },
-      { id: 'kiinniotto', label: 'Kiinniottotaito', weight: 6, selected: true, custom: false },
-      { id: 'nopeus', label: 'Nopeus', weight: 6, selected: true, custom: false },
-      { id: 'kestavyys', label: 'Kestävyys', weight: 5, selected: false, custom: false },
-      { id: 'pituus', label: 'Pituus / hyppykyky', weight: 4, selected: false, custom: false },
-      { id: 'puolustus', label: 'Puolustuspelaaminen (markkaus/peesaus)', weight: 7, selected: true, custom: false },
-      { id: 'pelilukutaito', label: 'Pelilukutaito / kokemus', weight: 6, selected: true, custom: false },
-      { id: 'kiekonhallinta', label: 'Kiekonhallinta (handler-taito)', weight: 6, selected: false, custom: false },
-      { id: 'kommunikointi', label: 'Kommunikointi / johtajuus', weight: 4, selected: false, custom: false },
-      { id: 'asenne', label: 'Asenne / kilpailuhenki', weight: 4, selected: false, custom: false },
+      { id: 'heitto', label: 'Heittotaito', weight: 3, selected: true, custom: false },
+      { id: 'kiekonhallinta', label: 'Kiekonhallinta (handler-taito)', weight: 3, selected: true, custom: false },
+      { id: 'kiinniotto', label: 'Kiinniottotaito', weight: 3, selected: true, custom: false },
+      { id: 'nopeus', label: 'Nopeus', weight: 3, selected: true, custom: false },
+      { id: 'puolustus', label: 'Puolustuspelaaminen (markkaus/peesaus)', weight: 3, selected: true, custom: false },
+      { id: 'pelilukutaito', label: 'Pelilukutaito / kokemus', weight: 3, selected: true, custom: false },
+      { id: 'ulottuvuus', label: 'Ulottuvuus', weight: 3, selected: false, custom: false },
+      { id: 'kestavyys', label: 'Kestävyys', weight: 3, selected: false, custom: false },
+      { id: 'kommunikointi', label: 'Kommunikointi / johtajuus', weight: 3, selected: false, custom: false },
+      { id: 'asenne', label: 'Asenne / kilpailuhenki', weight: 3, selected: false, custom: false },
     ];
 
     let players = []; // { id, name, gender: 'mies'|'nainen'|'none', values: { attrId: number } }
@@ -475,6 +497,12 @@
     let nextCustomAttrId = 1;
 
     let currentStep = 1;
+
+    const ATTR_MIN = 1;
+    const ATTR_MAX = 6;
+    const ATTR_DEFAULT = 3;
+
+    let sortState = { column: 'score', direction: 'desc' };
 
     // --- Helpers ---
     function selectedAttrs() {
@@ -497,7 +525,7 @@
       let sum = 0;
       let wsum = 0;
       attrs.forEach((a) => {
-        const v = player.values[a.id] != null ? player.values[a.id] : 5;
+        const v = player.values[a.id] != null ? player.values[a.id] : ATTR_DEFAULT;
         sum += v * a.weight;
         wsum += a.weight;
       });
@@ -531,7 +559,7 @@
         <tr data-attr-id="${a.id}">
           <td class="col-check"><input type="checkbox" data-role="attr-check" ${a.selected ? 'checked' : ''} /></td>
           <td>${escapeHtml(a.label)}</td>
-          <td class="col-weight"><input type="number" min="1" max="10" data-role="attr-weight" value="${a.weight}" /></td>
+          <td class="col-weight"><input type="number" min="1" max="5" data-role="attr-weight" value="${a.weight}" /></td>
           <td class="col-del">${a.custom ? '<button class="btn danger" data-role="attr-del" title="Poista">×</button>' : ''}</td>
         </tr>
       `).join('');
@@ -545,7 +573,7 @@
       body.querySelectorAll('[data-role="attr-weight"]').forEach((el) => {
         el.addEventListener('input', (e) => {
           const id = e.target.closest('tr').dataset.attrId;
-          const val = Math.min(10, Math.max(1, Number(e.target.value) || 1));
+          const val = Math.min(5, Math.max(1, Number(e.target.value) || 1));
           attributes.find((a) => a.id === id).weight = val;
         });
       });
@@ -563,7 +591,7 @@
       const input = document.getElementById('newAttrName');
       const name = input.value.trim();
       if (!name) return;
-      attributes.push({ id: `custom-${nextCustomAttrId++}`, label: name, weight: 5, selected: true, custom: true });
+      attributes.push({ id: `custom-${nextCustomAttrId++}`, label: name, weight: 3, selected: true, custom: true });
       input.value = '';
       renderAttrTable();
     });
@@ -575,104 +603,162 @@
         return;
       }
       errEl.style.display = 'none';
-      renderPlayerSliders();
+      renderPlayerTable();
       showStep(2);
     });
 
-    // --- Step 2: Players ---
-    function renderPlayerSliders() {
-      const container = document.getElementById('playerAttrSliders');
-      container.innerHTML = selectedAttrs().map((a) => `
-        <div class="attr-slider-row" data-attr-id="${a.id}">
-          <label>${escapeHtml(a.label)}</label>
-          <input type="range" min="1" max="10" value="5" data-role="attr-slider" />
-          <output>5</output>
-        </div>
-      `).join('');
+    // --- Step 2: Players table ---
+    // Columns depend on the currently selected attributes, so this is rebuilt
+    // whenever attributes change (leaving/re-entering step 1) or a player is
+    // added/removed/sorted. Rows are built with DOM APIs (not innerHTML string
+    // interpolation) so that player names — including ones imported from
+    // Nimenhuuto, which is attacker-influenceable data — can never break out
+    // of an HTML attribute.
 
-      container.querySelectorAll('[data-role="attr-slider"]').forEach((el) => {
-        el.addEventListener('input', (e) => {
-          e.target.nextElementSibling.textContent = e.target.value;
-        });
+    const SORT_COLUMNS = { NAME: 'name', GENDER: 'gender', SCORE: 'score' };
+
+    function sortedPlayersWithScore(attrs) {
+      const withScore = players.map((p) => ({ player: p, score: computeScore(p, attrs) }));
+      const { column, direction } = sortState;
+      const dir = direction === 'asc' ? 1 : -1;
+
+      withScore.sort((a, b) => {
+        let av;
+        let bv;
+        if (column === SORT_COLUMNS.NAME) {
+          av = a.player.name.toLowerCase();
+          bv = b.player.name.toLowerCase();
+        } else if (column === SORT_COLUMNS.GENDER) {
+          av = genderLabel(a.player.gender);
+          bv = genderLabel(b.player.gender);
+        } else if (column === SORT_COLUMNS.SCORE) {
+          av = a.score;
+          bv = b.score;
+        } else {
+          av = a.player.values[column] != null ? a.player.values[column] : ATTR_DEFAULT;
+          bv = b.player.values[column] != null ? b.player.values[column] : ATTR_DEFAULT;
+        }
+        if (av < bv) return -1 * dir;
+        if (av > bv) return 1 * dir;
+        return 0;
       });
+
+      return withScore;
     }
 
-    function renderPlayerList() {
-      const listEl = document.getElementById('playerList');
+    function sortArrow(column) {
+      if (sortState.column !== column) return '';
+      return sortState.direction === 'asc' ? '▲' : '▼';
+    }
+
+    function makeSortableHeader(text, column, defaultDirection) {
+      const th = document.createElement('th');
+      th.textContent = text + ' ';
+      const arrow = document.createElement('span');
+      arrow.className = 'sort-arrow';
+      arrow.textContent = sortArrow(column);
+      th.appendChild(arrow);
+      th.addEventListener('click', () => {
+        if (sortState.column === column) {
+          sortState.direction = sortState.direction === 'asc' ? 'desc' : 'asc';
+        } else {
+          sortState = { column, direction: defaultDirection };
+        }
+        renderPlayerTable();
+      });
+      return th;
+    }
+
+    function renderPlayerTableHead(attrs) {
+      const headRow = document.getElementById('playersTableHead');
+      headRow.innerHTML = '';
+      headRow.appendChild(makeSortableHeader('Nimi', SORT_COLUMNS.NAME, 'asc'));
+      headRow.appendChild(makeSortableHeader('Sukupuoli', SORT_COLUMNS.GENDER, 'asc'));
+      attrs.forEach((a) => {
+        headRow.appendChild(makeSortableHeader(a.label, a.id, 'desc'));
+      });
+      headRow.appendChild(makeSortableHeader('Pisteet', SORT_COLUMNS.SCORE, 'desc'));
+      headRow.appendChild(document.createElement('th')); // remove-button column
+    }
+
+    function renderPlayerTable() {
+      const attrs = selectedAttrs();
       document.getElementById('playerCount').textContent = players.length;
 
-      if (players.length === 0) {
-        listEl.innerHTML = '<div class="empty-msg">Ei vielä pelaajia.</div>';
-        return;
-      }
+      renderPlayerTableHead(attrs);
 
-      const attrs = selectedAttrs();
-      listEl.innerHTML = players.map((p) => {
-        const score = computeScore(p, attrs).toFixed(1);
-        return `
-          <div class="player-row" data-player-id="${p.id}">
-            <span>${escapeHtml(p.name)}<span class="gender-tag ${p.gender}">${genderLabel(p.gender)}</span></span>
-            <span class="player-score">
-              Pisteet: ${score} &nbsp;
-              <button class="btn" data-role="player-edit">Muokkaa</button>
-              <button class="btn danger" data-role="player-del">Poista</button>
-            </span>
-          </div>
-        `;
-      }).join('');
+      const body = document.getElementById('playersTableBody');
+      body.innerHTML = '';
+      document.getElementById('playersEmpty').style.display = players.length === 0 ? 'block' : 'none';
 
-      listEl.querySelectorAll('[data-role="player-del"]').forEach((el) => {
-        el.addEventListener('click', (e) => {
-          const id = Number(e.target.closest('.player-row').dataset.playerId);
-          players = players.filter((p) => p.id !== id);
-          if (editingPlayerId === id) exitEditMode();
-          renderPlayerList();
+      sortedPlayersWithScore(attrs).forEach(({ player, score }) => {
+        const tr = document.createElement('tr');
+        tr.dataset.playerId = String(player.id);
+
+        const nameTd = document.createElement('td');
+        const nameInput = document.createElement('input');
+        nameInput.type = 'text';
+        nameInput.value = player.name;
+        nameInput.addEventListener('change', () => {
+          const trimmed = nameInput.value.trim();
+          player.name = trimmed || player.name;
+          nameInput.value = player.name;
         });
-      });
-      listEl.querySelectorAll('[data-role="player-edit"]').forEach((el) => {
-        el.addEventListener('click', (e) => {
-          const id = Number(e.target.closest('.player-row').dataset.playerId);
-          enterEditMode(id);
+        nameTd.appendChild(nameInput);
+        tr.appendChild(nameTd);
+
+        const genderTd = document.createElement('td');
+        const genderSelect = document.createElement('select');
+        [['mies', 'Mies'], ['nainen', 'Nainen'], ['none', 'Ei arvoa']].forEach(([value, label]) => {
+          const opt = document.createElement('option');
+          opt.value = value;
+          opt.textContent = label;
+          if (value === player.gender) opt.selected = true;
+          genderSelect.appendChild(opt);
         });
+        genderSelect.addEventListener('change', () => {
+          player.gender = genderSelect.value;
+        });
+        genderTd.appendChild(genderSelect);
+        tr.appendChild(genderTd);
+
+        attrs.forEach((a) => {
+          const td = document.createElement('td');
+          const input = document.createElement('input');
+          input.type = 'number';
+          input.min = String(ATTR_MIN);
+          input.max = String(ATTR_MAX);
+          input.value = String(player.values[a.id] != null ? player.values[a.id] : ATTR_DEFAULT);
+          input.addEventListener('change', () => {
+            const val = Math.min(ATTR_MAX, Math.max(ATTR_MIN, Number(input.value) || ATTR_DEFAULT));
+            player.values[a.id] = val;
+            input.value = String(val);
+            renderPlayerTable(); // score column depends on this value
+          });
+          td.appendChild(input);
+          tr.appendChild(td);
+        });
+
+        const scoreTd = document.createElement('td');
+        scoreTd.className = 'col-score';
+        scoreTd.textContent = score.toFixed(1);
+        tr.appendChild(scoreTd);
+
+        const delTd = document.createElement('td');
+        const delBtn = document.createElement('button');
+        delBtn.className = 'btn danger';
+        delBtn.textContent = '×';
+        delBtn.title = 'Poista pelaaja';
+        delBtn.addEventListener('click', () => {
+          players = players.filter((p) => p.id !== player.id);
+          renderPlayerTable();
+        });
+        delTd.appendChild(delBtn);
+        tr.appendChild(delTd);
+
+        body.appendChild(tr);
       });
     }
-
-    // --- Add / edit player form (shared) ---
-    let editingPlayerId = null;
-
-    function enterEditMode(playerId) {
-      const player = players.find((p) => p.id === playerId);
-      if (!player) return;
-      editingPlayerId = playerId;
-
-      document.getElementById('playerName').value = player.name;
-      document.getElementById('playerGender').value = player.gender;
-      renderPlayerSliders();
-      document.querySelectorAll('#playerAttrSliders [data-attr-id]').forEach((row) => {
-        const attrId = row.dataset.attrId;
-        const slider = row.querySelector('[data-role="attr-slider"]');
-        const value = player.values[attrId] != null ? player.values[attrId] : 5;
-        slider.value = value;
-        slider.nextElementSibling.textContent = value;
-      });
-
-      document.getElementById('playerFormTitle').textContent = `Muokkaa pelaajaa: ${player.name}`;
-      document.getElementById('addPlayerBtn').textContent = '💾 Tallenna muutokset';
-      document.getElementById('cancelEditBtn').style.display = 'inline-flex';
-      document.getElementById('playerName').scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-
-    function exitEditMode() {
-      editingPlayerId = null;
-      document.getElementById('playerName').value = '';
-      document.getElementById('playerGender').value = 'mies';
-      renderPlayerSliders();
-      document.getElementById('playerFormTitle').textContent = 'Lisää pelaaja';
-      document.getElementById('addPlayerBtn').textContent = '+ Lisää pelaaja';
-      document.getElementById('cancelEditBtn').style.display = 'none';
-    }
-
-    document.getElementById('cancelEditBtn').addEventListener('click', exitEditMode);
 
     document.getElementById('addPlayerBtn').addEventListener('click', () => {
       const nameInput = document.getElementById('playerName');
@@ -686,25 +772,12 @@
 
       const gender = document.getElementById('playerGender').value;
       const values = {};
-      document.querySelectorAll('#playerAttrSliders [data-attr-id]').forEach((row) => {
-        const attrId = row.dataset.attrId;
-        const slider = row.querySelector('[data-role="attr-slider"]');
-        values[attrId] = Number(slider.value);
-      });
+      selectedAttrs().forEach((a) => { values[a.id] = ATTR_DEFAULT; });
 
-      if (editingPlayerId != null) {
-        const player = players.find((p) => p.id === editingPlayerId);
-        player.name = name;
-        player.gender = gender;
-        player.values = values;
-        exitEditMode();
-      } else {
-        players.push({ id: nextPlayerId++, name, gender, values });
-        nameInput.value = '';
-        renderPlayerSliders();
-        nameInput.focus();
-      }
-      renderPlayerList();
+      players.push({ id: nextPlayerId++, name, gender, values });
+      nameInput.value = '';
+      nameInput.focus();
+      renderPlayerTable();
     });
 
     // --- Nimenhuuto import ---
@@ -786,7 +859,7 @@
       if (checked.length === 0) return;
 
       const defaultValues = {};
-      selectedAttrs().forEach((a) => { defaultValues[a.id] = 5; });
+      selectedAttrs().forEach((a) => { defaultValues[a.id] = ATTR_DEFAULT; });
 
       checked.forEach((el) => {
         const candidate = nimenhuutoCandidates[Number(el.dataset.idx)];
@@ -799,7 +872,7 @@
         });
       });
 
-      renderPlayerList();
+      renderPlayerTable();
       renderNimenhuutoGroups(nimenhuutoLastFetch); // refresh "jo lisätty" state
     });
 
