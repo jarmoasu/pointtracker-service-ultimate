@@ -3,9 +3,13 @@ services:
     name: pointtracker-service
     runtime: node
     region: frankfurt
-    plan: free
+    plan: starter
     buildCommand: npm install && npm run build
     startCommand: npm start
+    disk:
+      name: sqlite
+      mountPath: /var/sqlite
+      sizeGB: 1
     envVars:
       - key: DATABASE_URL
         sync: false
@@ -14,7 +18,7 @@ services:
       - key: CLAIM_CODE
         sync: false
       - key: SESSION_SECRET_HEX
-        generateValue: true
+        sync: false
       - key: STREAM_ID
         value: main
       - key: NODE_ENV
