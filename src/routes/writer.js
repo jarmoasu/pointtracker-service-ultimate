@@ -1,9 +1,8 @@
 'use strict';
 
 const crypto = require('crypto');
-const argon2 = require('argon2');
 const prisma = require('../lib/prisma');
-const { requireWriter } = require('../lib/writerAuth');
+const { requireWriter, hashWriteToken } = require('../lib/writerAuth');
 const { MAX_TEXT_LENGTH, isTooLong } = require('../lib/text');
 
 function randomToken() {
@@ -50,7 +49,7 @@ async function writerRoutes(fastify) {
 
     // latest claim wins: overwrite this court's active write token
     const writeToken = randomToken();
-    const writeTokenHash = await argon2.hash(writeToken);
+    const writeTokenHash = hashWriteToken(writeToken);
 
     await prisma.streamAuth.update({
       where: { streamId: auth.streamId },
