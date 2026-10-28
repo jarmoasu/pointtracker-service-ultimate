@@ -49,6 +49,7 @@ async function adminRoutes(fastify) {
     if (!ok) return reply.code(401).send({ error: 'invalid password' });
 
     request.session.set('admin', true);
+    request.session.set('adminAt', Date.now());
     return { ok: true };
   });
 

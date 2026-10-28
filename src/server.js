@@ -4,10 +4,16 @@ require('dotenv').config();
 
 const path = require('path');
 
-const fastify = require('fastify')({ logger: true });
+const fastify = require('fastify')({
+  logger: true,
+  // Render's load balancer appends the real client IP to X-Forwarded-For.
+  // Trust only that hop; anything further left is client-controlled.
+  trustProxy: 1,
+});
 
 const cookie = require('@fastify/cookie');
 const secureSession = require('@fastify/secure-session');
+const { ADMIN_SESSION_MAX_AGE_MS } = require('./lib/adminAuth');
 const fastifyStatic = require('@fastify/static');
 const cors = require('@fastify/cors');
 const rateLimit = require('@fastify/rate-limit');
@@ -62,6 +68,7 @@ async function start() {
         httpOnly: true,
         secure: true, // Render is HTTPS
         sameSite: 'lax',
+        maxAge: ADMIN_SESSION_MAX_AGE_MS / 1000, // seconds; server also enforces it
       },
     });
 
@@ -89,6 +96,17 @@ async function start() {
       reply.header('X-Content-Type-Options', 'nosniff');
       reply.header('Referrer-Policy', 'strict-origin-when-cross-origin');
       return payload;
+    });
+
+    // TEMP: verify proxy hop count for trustProxy. Remove after checking logs.
+    fastify.addHook('onRequest', async (request) => {
+      if (request.url === '/health') {
+        request.log.info({
+          xff: request.headers['x-forwarded-for'],
+          remote: request.socket.remoteAddress,
+          ip: request.ip,
+        }, 'ip debug');
+      }
     });
 
     // --- Rate limiting (per-route) ---

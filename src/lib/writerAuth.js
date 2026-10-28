@@ -2,6 +2,7 @@
 
 const argon2 = require('argon2');
 const prisma = require('./prisma');
+const { isAdminSession } = require('./adminAuth');
 
 function getBearerToken(request) {
   const authHeader = request.headers.authorization || '';
@@ -32,7 +33,7 @@ async function requireWriter(request, reply) {
     }
 
     // Allow admin session to act as writer (for admin UI convenience)
-    if (request.session && request.session.get('admin') === true) {
+    if (isAdminSession(request.session)) {
       request.writer = { streamId, name: auth.activeWriterName || null, claimedAt: auth.claimedAt || null };
       return;
     }
