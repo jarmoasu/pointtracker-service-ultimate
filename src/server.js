@@ -6,9 +6,10 @@ const path = require('path');
 
 const fastify = require('fastify')({
   logger: true,
-  // Render's load balancer appends the real client IP to X-Forwarded-For.
-  // Trust only that hop; anything further left is client-controlled.
-  trustProxy: 1,
+  // Requests pass Cloudflare (Render's edge) and Render's load balancer, so
+  // X-Forwarded-For ends with "<client>, <cloudflare>". Trust those two hops;
+  // anything further left is client-controlled.
+  trustProxy: 2,
 });
 
 const cookie = require('@fastify/cookie');
@@ -81,7 +82,7 @@ async function start() {
       "script-src 'self' 'unsafe-inline'",
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data:",
-      "connect-src 'self' https://pointtracker-service-ultimate.onrender.com",
+      "connect-src 'self'",
       "object-src 'none'",
       "base-uri 'none'",
       "form-action 'self'",
@@ -96,17 +97,6 @@ async function start() {
       reply.header('X-Content-Type-Options', 'nosniff');
       reply.header('Referrer-Policy', 'strict-origin-when-cross-origin');
       return payload;
-    });
-
-    // TEMP: verify proxy hop count for trustProxy. Remove after checking logs.
-    fastify.addHook('onRequest', async (request) => {
-      if (request.url === '/health') {
-        request.log.info({
-          xff: request.headers['x-forwarded-for'],
-          remote: request.socket.remoteAddress,
-          ip: request.ip,
-        }, 'ip debug');
-      }
     });
 
     // --- Rate limiting (per-route) ---

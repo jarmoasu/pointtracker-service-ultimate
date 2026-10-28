@@ -362,7 +362,7 @@
     'use strict';
 
     // ─── CONFIG ──────────────────────────────────────────────────────────────
-    const API_BASE         = 'https://pointtracker-service-ultimate.onrender.com';
+    const API_BASE         = ''; // same origin as the page
     const STREAM_ID        = new URLSearchParams(location.search).get('stream');
     const API_URL          = STREAM_ID ? `${API_BASE}/streams/${encodeURIComponent(STREAM_ID)}/live` : null;
     const POLL_MS          = 5000;
