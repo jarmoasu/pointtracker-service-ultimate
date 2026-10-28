@@ -120,7 +120,7 @@
   <div class="card">
     <h2>+ Uusi kenttä</h2>
     <input id="newStreamIdInput" placeholder="esim. kentta-1" />
-    <input id="newLabelInput" placeholder="Nimi (valinnainen)" />
+    <input id="newLabelInput" placeholder="Nimi (valinnainen)" maxlength="60" />
     <button onclick="createStream()">Luo kenttä</button>
     <div id="createResult"></div>
   </div>
@@ -155,8 +155,8 @@
   <!-- UPDATE TEAMS -->
   <div class="card">
     <h2>Update Teams</h2>
-    <input id="homeTeamInput" placeholder="Home Team" />
-    <input id="awayTeamInput" placeholder="Away Team" />
+    <input id="homeTeamInput" placeholder="Home Team" maxlength="60" />
+    <input id="awayTeamInput" placeholder="Away Team" maxlength="60" />
     <button onclick="updateTeams()">Save Teams</button>
     <div id="teamsResult" class="success"></div>
   </div>
@@ -189,13 +189,13 @@
 
     <label>
       Last Scorer:
-      <input id="lastScorerInput" placeholder="Optional" />
+      <input id="lastScorerInput" placeholder="Optional" maxlength="60" />
     </label>
     <br><br>
 
     <label>
       Last Assist:
-      <input id="lastAssistInput" placeholder="Optional" />
+      <input id="lastAssistInput" placeholder="Optional" maxlength="60" />
     </label>
     <br><br>
 
@@ -274,6 +274,17 @@ async function readResponseBody(res) {
   } catch (_) {
     return null;
   }
+}
+
+// Escapes untrusted strings (team names, labels, device names) before they
+// are concatenated into innerHTML.
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 function setResult(el, ok, message) {
@@ -365,15 +376,18 @@ async function loadStreamList() {
     row.className = "stream-row";
     row.innerHTML =
       '<div class="info">' +
-        '<div class="streamId">' + s.streamId + (s.label && s.label !== s.streamId ? " — " + s.label : "") + '</div>' +
-        '<div class="meta">' + describeScore(s.state) + '</div>' +
-        '<div class="meta">' + describeWriter(s.writer) + '</div>' +
+        '<div class="streamId">' + escapeHtml(s.streamId + (s.label && s.label !== s.streamId ? " — " + s.label : "")) + '</div>' +
+        '<div class="meta">' + escapeHtml(describeScore(s.state)) + '</div>' +
+        '<div class="meta">' + escapeHtml(describeWriter(s.writer)) + '</div>' +
       '</div>' +
       '<div class="actions">' +
-        '<button onclick="manageStream(\'' + s.streamId + '\')">Hallitse</button>' +
-        '<button onclick="resetStreamFromList(\'' + s.streamId + '\')">Nollaa</button>' +
-        '<button class="danger" onclick="deleteStreamFromList(\'' + s.streamId + '\')">Poista</button>' +
+        '<button data-action="manage">Hallitse</button>' +
+        '<button data-action="reset">Nollaa</button>' +
+        '<button class="danger" data-action="delete">Poista</button>' +
       '</div>';
+    row.querySelector('[data-action="manage"]').addEventListener("click", () => manageStream(s.streamId));
+    row.querySelector('[data-action="reset"]').addEventListener("click", () => resetStreamFromList(s.streamId));
+    row.querySelector('[data-action="delete"]').addEventListener("click", () => deleteStreamFromList(s.streamId));
     container.appendChild(row);
   });
 }
@@ -400,9 +414,9 @@ async function createStream() {
   const scoreboardUrl = location.origin + "/scoreboard.html?stream=" + encodeURIComponent(data.streamId);
   const overlayUrl = location.origin + "/overlay.html?stream=" + encodeURIComponent(data.streamId);
   resultEl.innerHTML =
-    '<div class="success">Kenttä "' + data.streamId + '" luotu. Claim-koodi: <b>' + data.claimCode + '</b></div>' +
-    '<div class="links"><a href="' + scoreboardUrl + '" target="_blank">' + scoreboardUrl + '</a>' +
-    '<a href="' + overlayUrl + '" target="_blank">' + overlayUrl + '</a></div>';
+    '<div class="success">Kenttä "' + escapeHtml(data.streamId) + '" luotu. Claim-koodi: <b>' + escapeHtml(data.claimCode) + '</b></div>' +
+    '<div class="links"><a href="' + escapeHtml(scoreboardUrl) + '" target="_blank">' + escapeHtml(scoreboardUrl) + '</a>' +
+    '<a href="' + escapeHtml(overlayUrl) + '" target="_blank">' + escapeHtml(overlayUrl) + '</a></div>';
 
   document.getElementById("newStreamIdInput").value = "";
   document.getElementById("newLabelInput").value = "";
@@ -476,8 +490,8 @@ async function loadState() {
   const scoreboardUrl = location.origin + "/scoreboard.html?stream=" + encodeURIComponent(currentStreamId);
   const overlayUrl = location.origin + "/overlay.html?stream=" + encodeURIComponent(currentStreamId);
   document.getElementById("shareLinks").innerHTML =
-    '<a href="' + scoreboardUrl + '" target="_blank">' + scoreboardUrl + '</a>' +
-    '<a href="' + overlayUrl + '" target="_blank">' + overlayUrl + '</a>';
+    '<a href="' + escapeHtml(scoreboardUrl) + '" target="_blank">' + escapeHtml(scoreboardUrl) + '</a>' +
+    '<a href="' + escapeHtml(overlayUrl) + '" target="_blank">' + escapeHtml(overlayUrl) + '</a>';
 
   await loadClaimCode();
 }

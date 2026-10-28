@@ -210,6 +210,17 @@
       return new Date(iso).toLocaleString('fi-FI');
     }
 
+    // Team names, labels and device names come from writers, so they must be
+    // escaped before being placed into the innerHTML template below.
+    function escapeHtml(value) {
+      return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
     function describeClaim(writer) {
       if (!writer || !writer.activeWriterName) {
         return writer ? 'Claimattu (nimetön laite)' : 'Ei claimattu';
@@ -220,27 +231,28 @@
 
     function courtHtml(court) {
       const running = Boolean(court.clockRunning);
-      const home = court.homeTeamName || 'Home';
-      const away = court.awayTeamName || 'Away';
+      const home = escapeHtml(court.homeTeamName || 'Home');
+      const away = escapeHtml(court.awayTeamName || 'Away');
+      const streamId = escapeHtml(court.streamId);
       const scoreboardUrl = `/scoreboard.html?stream=${encodeURIComponent(court.streamId)}`;
       const overlayUrl = `/overlay.html?stream=${encodeURIComponent(court.streamId)}`;
       const feedUrl = `/streams/${encodeURIComponent(court.streamId)}/live`;
 
       return `
-        <div class="court ${running ? 'running' : ''}" data-stream-id="${court.streamId}">
+        <div class="court ${running ? 'running' : ''}" data-stream-id="${streamId}">
           <div class="court-top">
-            <div class="court-name">${court.label} <span class="court-id">${court.streamId}</span></div>
+            <div class="court-name">${escapeHtml(court.label)} <span class="court-id">${streamId}</span></div>
             <div class="status-badge ${running ? 'running' : ''}">
               <span class="dot"></span>
               ${running ? 'PELI KÄYNNISSÄ' : 'EI KÄYNNISSÄ'}
             </div>
           </div>
           <div class="score-line">
-            ${home} ${court.homeScore} - ${court.awayScore} ${away}
+            ${home} ${escapeHtml(court.homeScore)} - ${escapeHtml(court.awayScore)} ${away}
             <span class="clock" data-clock>${formatClock(liveClockSeconds(court))}</span>
           </div>
           <div class="meta-grid">
-            <div>Claimattu: <b>${describeClaim(court.writer)}</b></div>
+            <div>Claimattu: <b>${escapeHtml(describeClaim(court.writer))}</b></div>
             <div>Viimeisin tapahtuma: <b data-updated>${formatRelativeTime(court.updatedAt)}</b></div>
           </div>
           <div class="links">

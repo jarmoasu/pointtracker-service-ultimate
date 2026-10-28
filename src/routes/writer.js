@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const argon2 = require('argon2');
 const prisma = require('../lib/prisma');
 const { requireWriter } = require('../lib/writerAuth');
+const { MAX_TEXT_LENGTH, isTooLong } = require('../lib/text');
 
 function randomToken() {
   // 32 bytes => 64 hex chars
@@ -31,6 +32,10 @@ async function writerRoutes(fastify) {
 
     if (!claimCode) {
       return reply.code(400).send({ error: 'claimCode required' });
+    }
+
+    if (isTooLong(deviceName)) {
+      return reply.code(400).send({ error: `deviceName must be at most ${MAX_TEXT_LENGTH} characters` });
     }
 
     // Claim codes are looked up by their stored plaintext (already how the
@@ -83,6 +88,10 @@ async function writerRoutes(fastify) {
     const { streamId } = request.params;
     const home = homeTeamName.trim();
     const away = awayTeamName.trim();
+
+    if (isTooLong(home) || isTooLong(away)) {
+      return reply.code(400).send({ error: `team names must be at most ${MAX_TEXT_LENGTH} characters` });
+    }
 
     const current = await prisma.streamState.findUnique({
       where: { streamId },
@@ -213,6 +222,12 @@ async function writerRoutes(fastify) {
 
     const updateData = {};
 
+    for (const field of ['homeTeamName', 'awayTeamName', 'lastScorer', 'lastAssist']) {
+      if (typeof body[field] === 'string' && isTooLong(body[field].trim())) {
+        return reply.code(400).send({ error: `${field} must be at most ${MAX_TEXT_LENGTH} characters` });
+      }
+    }
+
     // All fields optional. Only apply fields that are present.
     if (typeof body.homeTeamName === 'string') {
       const v = body.homeTeamName.trim();
@@ -319,6 +334,15 @@ async function writerRoutes(fastify) {
 
     if (!requestId || typeof requestId !== 'string') {
       return reply.code(400).send({ error: 'requestId required' });
+    }
+
+    for (const [field, value] of [['scorer', scorer], ['assist', assist]]) {
+      if (value != null && typeof value !== 'string') {
+        return reply.code(400).send({ error: `${field} must be a string` });
+      }
+      if (isTooLong(value)) {
+        return reply.code(400).send({ error: `${field} must be at most ${MAX_TEXT_LENGTH} characters` });
+      }
     }
 
     const { streamId } = request.params;

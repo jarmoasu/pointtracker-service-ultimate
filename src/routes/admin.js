@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const argon2 = require('argon2');
 const prisma = require('../lib/prisma');
 const { requireAdmin } = require('../lib/adminAuth');
+const { MAX_TEXT_LENGTH, isTooLong } = require('../lib/text');
 
 function randomClaimCode() {
   // 8 chars, uppercase-friendly
@@ -80,6 +81,10 @@ async function adminRoutes(fastify) {
       return reply.code(400).send({
         error: 'streamId must be 2-32 chars: lowercase letters, numbers, and dashes, starting with a letter or number',
       });
+    }
+
+    if (isTooLong(label)) {
+      return reply.code(400).send({ error: `label must be at most ${MAX_TEXT_LENGTH} characters` });
     }
 
     const existing = await prisma.streamState.findUnique({ where: { streamId } });

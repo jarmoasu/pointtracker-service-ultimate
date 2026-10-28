@@ -65,6 +65,32 @@ async function start() {
       },
     });
 
+    // --- Security headers ---
+    // The pages still use inline <script> blocks and onclick handlers, so
+    // script-src needs 'unsafe-inline'. The rest of the policy blocks loading
+    // or exfiltrating to third-party origins if an injection ever slips through.
+    const baseCsp = [
+      "default-src 'self'",
+      "script-src 'self' 'unsafe-inline'",
+      "style-src 'self' 'unsafe-inline'",
+      "img-src 'self' data:",
+      "connect-src 'self' https://pointtracker-service-ultimate.onrender.com",
+      "object-src 'none'",
+      "base-uri 'none'",
+      "form-action 'self'",
+    ].join('; ');
+
+    fastify.addHook('onSend', async (request, reply, payload) => {
+      const isAdminPage = request.url.startsWith('/admin');
+      reply.header(
+        'Content-Security-Policy',
+        isAdminPage ? `${baseCsp}; frame-ancestors 'none'` : baseCsp,
+      );
+      reply.header('X-Content-Type-Options', 'nosniff');
+      reply.header('Referrer-Policy', 'strict-origin-when-cross-origin');
+      return payload;
+    });
+
     // --- Rate limiting (per-route) ---
     await fastify.register(rateLimit, { global: false });
 
