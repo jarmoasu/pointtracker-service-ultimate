@@ -1,8 +1,22 @@
 'use strict';
 
-const argon2 = require('argon2');
+const crypto = require('crypto');
 const prisma = require('./prisma');
 const { isAdminSession } = require('./adminAuth');
+
+// Write tokens are 256-bit random values, so a plain SHA-256 digest is enough;
+// a slow password hash (argon2) here would let junk tokens exhaust memory.
+function hashWriteToken(token) {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+function verifyWriteToken(storedHash, token) {
+  const expected = Buffer.from(storedHash, 'hex');
+  const actual = crypto.createHash('sha256').update(token).digest();
+  // Legacy argon2 hashes don't decode to 32 bytes and never match; the
+  // writer must re-claim to get a token stored in the new format.
+  return expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
+}
 
 function getBearerToken(request) {
   const authHeader = request.headers.authorization || '';
@@ -49,7 +63,7 @@ async function requireWriter(request, reply) {
       return reply.send({ error: 'no active writer token set' });
     }
 
-    const ok = await argon2.verify(auth.activeWriteTokenHash, token);
+    const ok = verifyWriteToken(auth.activeWriteTokenHash, token);
     if (!ok) {
       reply.code(401);
       return reply.send({ error: 'invalid bearer token' });
@@ -70,4 +84,4 @@ async function requireWriter(request, reply) {
   }
 }
 
-module.exports = { requireWriter };
+module.exports = { requireWriter, hashWriteToken };
